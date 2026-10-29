@@ -17,8 +17,8 @@
 	#toc .l2 { padding-left: 30px; color: #334155; }
 	#toc .l3 { padding-left: 46px; color: var(--muted); font-size: 12px; }
 	#toc .n { color: var(--accent); margin-right: 4px; }
-	#toc .wh { padding: 2px 14px 8px; font-weight: bold; color: #0f172a; cursor: default; }
-	#toc .wh:hover { background: none; }
+	#toc .wh { padding: 2px 14px 8px; font-weight: bold; color: #0f172a; cursor: pointer; }
+	#toc .wh:hover { background: none; color: var(--accent); }
 	#toc .wi { padding: 7px 14px; border-left: 3px solid transparent; }
 	#toc .wi.on { background: #fff; border-left-color: var(--accent); font-weight: bold; color: #0f766e; cursor: default; }
 	#toc .wi .st { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #cbd5e1; vertical-align: middle; }
@@ -42,6 +42,7 @@
 <body>
 <div id="bar">
 	<button class="btn wonly" id="bBack" title="작업 목록으로">← 목록</button>
+	<button class="btn wonly" id="bTodos" title="이 작업의 할일 목록으로">☰ 할일 목록</button>
 	<h2 id="title">…</h2>
 	<input class="inp wonly" id="tTitle" placeholder="작업 제목" title="작업 제목">
 	<select class="inp wonly" id="tCat" title="카테고리"><option value="">미분류</option></select>
@@ -140,10 +141,10 @@
 	}
 	// 다운로드 파일 이름: 서버관리는 원본 파일 이름, 작업은 제목
 	function fileBase() { return WORK ? String(data.title || "작업").replace(/[\\\/:*?"<>|]/g, "_") : sourceBase(data.source); }
-	// ← 목록: 작업(또는 할일)이 속한 작업의 할일 목록으로
-	$("bBack").onclick = function () {
-		location.href = "../work/work" + (window.MK_EXT || ".jsp") + "?id=" + encodeURIComponent((data && data.parent) || DOC) + "&cat=" + CAT;
-	};
+	// ← 목록 = 작업 목록 (카테고리), ☰ 할일 목록 = 이 문서가 속한 작업의 할일 목록
+	$("bBack").onclick = function () { location.href = "../work/index" + (window.MK_EXT || ".jsp") + "?cat=" + CAT; };
+	function goTodos() { location.href = "../work/work" + (window.MK_EXT || ".jsp") + "?id=" + encodeURIComponent((data && data.parent) || DOC) + "&cat=" + CAT; }
+	$("bTodos").onclick = goTodos;
 	// 카테고리 목록 (작업내역 [카테고리 관리]에서 고침)
 	var CATS = [];
 	var catsP = WORK ? fetch("data.jsp?space=work&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (cs) {
@@ -168,7 +169,7 @@
 					+ (label ? label : '<span class="st s-' + esc(w.status) + '"></span>' + esc(w.title || "제목 없음")) + "</div>"
 					+ (w.id === DOC ? '<div id="tocH"></div>' : "");
 			}
-			$("toc").innerHTML = '<div class="wh" title="' + esc(work.title) + '">' + esc(work.title || "작업") + ' <span class="muted">할일 ' + ts.length + "</span></div>"
+			$("toc").innerHTML = '<div class="wh" data-todos title="할일 목록으로">' + esc(work.title || "작업") + ' <span class="muted">할일 ' + ts.length + " ›</span></div>"
 				+ item(work, "📄 작업 개요") + ts.map(function (t) { return item(t); }).join("");
 			updateToc();
 		});
@@ -217,6 +218,7 @@
 		return c.textContent.replace(/\s+/g, " ").trim();
 	}
 	$("toc").addEventListener("click", function (e) {
+		if (e.target.closest("[data-todos]")) { goTodos(); return; }
 		var w = e.target.closest("[data-w]");
 		if (w) {
 			if (w.getAttribute("data-w") !== DOC) location.href = "doc" + (window.MK_EXT || ".jsp") + "?space=work&doc=" + encodeURIComponent(w.getAttribute("data-w")) + "&cat=" + CAT;

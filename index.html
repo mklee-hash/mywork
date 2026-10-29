@@ -46,7 +46,21 @@
 	#pub pre { max-height: 220px; overflow: auto; margin: 10px 0 0; padding: 8px 10px; background: #f1f5f9; border-radius: 6px; font-size: 12px; white-space: pre-wrap; }
 	#pub .err { color: #b91c1c; }
 	#pub .ok { color: #0f766e; }
-	@media (max-width: 720px) { #wrap { flex-direction: column; } #side { width: 100%; max-height: 30%; } #top h1 { margin-right: 6px; } }
+	/* 휴대폰: 대메뉴 탭을 둘째 줄 전체로 (옆으로 밀어서 봄), 하위 메뉴는 가로 줄 */
+	@media (max-width: 720px) {
+		#top { flex-wrap: wrap; padding: 0 8px; }
+		#top h1 { margin-right: 6px; font-size: 16px; line-height: 40px; }
+		#top .tb { margin-left: auto; font-size: 11px; }
+		#top .tb > span { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+		#tabs { order: 3; width: 100%; border-top: 1px solid #1e293b; }
+		#tabs a { padding: 10px 14px; }
+		#wrap { flex-direction: column; }
+		#side { width: 100%; max-height: none; flex: none; }
+		#menu { display: flex; overflow-x: auto; padding: 0; }
+		#menu li { flex: none; padding: 9px 14px; border-left: 0; border-bottom: 3px solid transparent; white-space: nowrap; }
+		#menu li.on { border-bottom-color: var(--accent); }
+		#menu .nw, #foot { display: none !important; }
+	}
 </style>
 </head>
 <body>

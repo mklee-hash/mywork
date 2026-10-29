@@ -27,6 +27,12 @@
 	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
 	table.list td.k-act { width: 40px; text-align: right; }
 	.filters .btn.on { font-weight: bold; }
+	select.sts { height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 12px; font: inherit; font-size: 12px; cursor: pointer; background: #e2e8f0; color: #334155; }
+	select.sts:hover { border-color: var(--line2); }
+	select.sts.s-진행중 { background: #dbeafe; color: #1e40af; }
+	select.sts.s-대기 { background: #fef3c7; color: #92400e; }
+	select.sts.s-완료 { background: #dcfce7; color: #166534; }
+	select.sts option { background: #fff; color: #0f172a; }
 	@media (max-width: 900px) { #side { display: none; } }
 </style>
 </head>
@@ -65,11 +71,18 @@
 	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
 	function catTitle(id) { var c = cats.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
 	function docUrl(id) { return "../common/doc" + EXT + "?space=work&doc=" + encodeURIComponent(id) + "&cat=" + CAT; }
+	// 상태: 목록에서 바로 고르기 (보기 사이트에서는 글자로만)
+	function statusCtl(id, st) {
+		if (window.MK_STATIC) return '<span class="badge s-' + esc(st) + '">' + esc(st || "-") + "</span>";
+		return '<select class="sts s-' + esc(st) + '" data-sid="' + esc(id) + '" title="상태 바꾸기">' + STATUS.map(function (s) {
+			return "<option" + (s === st ? " selected" : "") + ">" + s + "</option>";
+		}).join("") + "</select>";
+	}
 
 	function render() {
 		$("title").textContent = work.title || "제목 없음";
 		document.title = (work.title || "작업") + " - 할일";
-		$("meta").innerHTML = '<span class="badge">' + esc(catTitle(work.category)) + '</span> <span class="badge s-' + esc(work.status) + '">' + esc(work.status || "-") + "</span>";
+		$("meta").innerHTML = '<span class="badge">' + esc(catTitle(work.category)) + "</span> " + statusCtl(work.id, work.status);
 		$("filters").innerHTML = [""].concat(STATUS).map(function (s) {
 			var n = todos.filter(function (t) { return !s || t.status === s; }).length;
 			return '<button class="btn' + (filter === s ? " on" : "") + '" data-f="' + esc(s) + '">' + (s || "전체") + " " + n + "</button>";
@@ -88,7 +101,7 @@
 			h.push('<table class="list"><thead><tr><th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
 			rows.forEach(function (t) {
 				h.push('<tr class="row" data-open="' + esc(t.id) + '"><td class="k-title">' + esc(t.title || "제목 없음") + "</td>"
-					+ '<td><span class="badge s-' + esc(t.status) + '">' + esc(t.status || "-") + "</span></td>"
+					+ "<td>" + statusCtl(t.id, t.status) + "</td>"
 					+ '<td class="k-date">' + esc(t.createdAt || "-") + '</td><td class="k-date">' + esc(t.savedAt || "-") + "</td>"
 					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(t.id) + '" title="삭제">✕</button></td></tr>');
 			});
@@ -116,7 +129,32 @@
 
 	$("bBack").onclick = function () { location.href = "index" + EXT + "?cat=" + CAT; };
 	$("bOverview").onclick = function () { location.href = docUrl(ID); };
+	// 상태만 바꿔 저장: 문서를 받아 status 만 고쳐 다시 저장 (버전 확인은 그대로)
+	function setStatus(id, st) {
+		var ver = "";
+		msg("상태 저장 중…");
+		return fetch(API + "&doc=" + encodeURIComponent(id), { cache: "no-store" }).then(function (r) {
+			if (!r.ok) throw new Error(r.status);
+			ver = r.headers.get("X-Ver") || "";
+			return r.json();
+		}).then(function (j) {
+			j.status = st;
+			j.savedAt = now();
+			return fetch(API + "&doc=" + encodeURIComponent(id) + "&ver=" + encodeURIComponent(ver), {
+				method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(j)
+			});
+		}).then(function (r) {
+			if (!r.ok) throw new Error(r.status === 409 ? "다른 창에서 고치는 중입니다. 새로고침 후 다시 하세요." : r.status);
+			msg("상태를 '" + st + "'(으)로 바꿨습니다.", "ok");
+			return load();
+		}).catch(function (e) { msg("상태 저장 실패: " + e.message, "err"); load(); });
+	}
+	document.addEventListener("change", function (e) {
+		var s = e.target.closest("select[data-sid]");
+		if (s) setStatus(s.getAttribute("data-sid"), s.value);
+	});
 	document.addEventListener("click", function (e) {
+		if (e.target.closest("select")) return;
 		var b = e.target.closest("[data-f]");
 		if (b) { filter = b.getAttribute("data-f"); render(); return; }
 		b = e.target.closest("[data-del]");
