@@ -183,7 +183,8 @@
 				+ '<a class="nw" href="' + esc(x.url) + '" target="_blank" title="새 창">↗</a></li>';
 		}).join("");
 		$("foot").innerHTML = t.pcOnly ? "OZ 서버가 필요한 화면이라<br>내 PC에서만 동작합니다." : STATIC ? "보기 전용입니다." : "저장할 때마다 이전 내용이<br>백업됩니다.";
-		document.title = (it ? it.title + " - " : "") + "mkwork";
+		// 브라우저 탭: 내 PC(고치는 곳) = mkwork-edit, GitHub(보기만) = mkwork-view
+		document.title = (STATIC ? "mkwork-view" : "mkwork-edit") + (it ? " · " + it.title : "");
 		if (it && $("frame").getAttribute("src") !== it.url) $("frame").setAttribute("src", it.url);
 	}
 	$("menu").addEventListener("click", function (e) {

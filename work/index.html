@@ -64,11 +64,14 @@
 	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
 	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
-	function docUrl(id) { return "../common/doc" + EXT + "?space=work&doc=" + encodeURIComponent(id) + "&cat=" + CAT; }
+	// 작업을 누르면 그 작업의 할일 목록 (work.jsp)
+	function workUrl(id) { return "work" + EXT + "?id=" + encodeURIComponent(id) + "&cat=" + CAT; }
+	function todosOf(id) { return list.filter(function (t) { return t.parent === id; }); }
+	function works() { return list.filter(function (w) { return !w.parent; }); }
 
 	function render() {
 		var all = CAT === "all";
-		var mine = list.filter(function (w) { return all || w.category === CAT; });
+		var mine = works().filter(function (w) { return all || w.category === CAT; });
 		$("title").textContent = "작업내역 · " + (all ? "전체" : catTitle(CAT));
 		$("filters").innerHTML = [""].concat(STATUS).map(function (s) {
 			var n = mine.filter(function (w) { return !s || w.status === s; }).length;
@@ -80,10 +83,12 @@
 		var h = ['<section class="card"><header><h3>작업 목록</h3><span class="cnt">' + rows.length + "</span></header>"];
 		if (!rows.length) h.push('<div class="empty">' + (mine.length ? "조건에 맞는 작업이 없습니다." : "아직 작업이 없습니다." + (window.MK_STATIC ? "" : " [＋ 새 작업]으로 만드세요.")) + "</div>");
 		else {
-			h.push('<table class="list"><thead><tr><th>제목</th>' + (all ? "<th>카테고리</th>" : "") + '<th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
+			h.push('<table class="list"><thead><tr><th>작업</th>' + (all ? "<th>카테고리</th>" : "") + '<th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
 			rows.forEach(function (w) {
+				var ts = todosOf(w.id), done = ts.filter(function (t) { return t.status === "완료"; }).length;
 				h.push('<tr class="row" data-id="' + esc(w.id) + '"><td class="k-title">' + esc(w.title || "제목 없음") + "</td>"
 					+ (all ? '<td><span class="badge">' + esc(catTitle(w.category)) + "</span></td>" : "")
+					+ '<td class="k-date">' + (ts.length ? ts.length + "개 · 완료 " + done : "-") + "</td>"
 					+ '<td><span class="badge s-' + esc(w.status) + '">' + esc(w.status || "-") + "</span></td>"
 					+ '<td class="k-date">' + esc(w.createdAt || "-") + '</td><td class="k-date">' + esc(w.savedAt || "-") + "</td>"
 					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(w.id) + '" title="삭제">✕</button></td></tr>');
@@ -91,7 +96,7 @@
 			h.push("</tbody></table>");
 		}
 		$("content").innerHTML = h.join("") + "</section>";
-		$("sInfo").textContent = (all ? "" : catTitle(CAT) + " " + mine.length + "건 · ") + "전체 " + list.length + "건";
+		$("sInfo").textContent = (all ? "" : catTitle(CAT) + " " + mine.length + "건 · ") + "전체 작업 " + works().length + "건";
 	}
 
 	function load() {
@@ -115,32 +120,37 @@
 		if (b) {
 			e.stopPropagation();
 			var w = list.filter(function (x) { return x.id === b.getAttribute("data-del"); })[0];
-			if (!w || !confirm("'" + (w.title || "제목 없음") + "' 작업을 삭제할까요?\n(WEB-INF/data/work/_backup 에 남습니다)")) return;
-			fetch(API + "&doc=" + encodeURIComponent(w.id) + "&delete=1", { method: "POST" }).then(function (r) {
-				if (!r.ok) throw new Error(r.status);
+			var ts = w ? todosOf(w.id) : [];
+			if (!w || !confirm("'" + (w.title || "제목 없음") + "' 작업" + (ts.length ? "과 할일 " + ts.length + "개" : "") + "를 삭제할까요?\n(WEB-INF/data/work/_backup 에 남습니다)")) return;
+			// 할일 먼저, 작업은 마지막에
+			ts.concat([w]).reduce(function (p, d) {
+				return p.then(function () {
+					return fetch(API + "&doc=" + encodeURIComponent(d.id) + "&delete=1", { method: "POST" }).then(function (r) { if (!r.ok) throw new Error(r.status); });
+				});
+			}, Promise.resolve()).then(function () {
 				msg("삭제했습니다.", "ok");
 				load();
-			}).catch(function (e) { msg("삭제 실패: " + e.message, "err"); });
+			}).catch(function (e) { msg("삭제 실패: " + e.message, "err"); load(); });
 			return;
 		}
 		var tr = e.target.closest("tr.row");
-		if (tr) location.href = docUrl(tr.getAttribute("data-id"));
+		if (tr) location.href = workUrl(tr.getAttribute("data-id"));
 	});
 
 	$("bNew").onclick = function () {
-		var t = prompt("새 작업 제목" + (CAT === "all" ? " (카테고리는 문서에서 고를 수 있습니다)" : " - " + catTitle(CAT)), "");
+		var t = prompt("새 작업 제목" + (CAT === "all" ? " (카테고리는 [작업 개요]에서 고를 수 있습니다)" : " - " + catTitle(CAT)), "");
 		if (t === null) return;
 		t = t.trim() || "제목 없음";
 		var id = "w" + Date.now().toString(36), at = now();
 		var body = { type: "doc", title: t, category: CAT === "all" ? "" : CAT, status: "진행중", createdAt: at, savedAt: at, html: "<h1>" + esc(t) + "</h1><p><br></p>" };
 		fetch(API + "&doc=" + id + "&ver=", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body) })
-			.then(function (r) { if (!r.ok) throw new Error(r.status); location.href = docUrl(id); })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); location.href = workUrl(id); })
 			.catch(function (e) { msg("만들기 실패: " + e.message, "err"); });
 	};
 
 	// ---------------------------------------------------------------- 카테고리 관리
 	function catRow(c) {
-		var n = list.filter(function (w) { return w.category === c.id; }).length;
+		var n = works().filter(function (w) { return w.category === c.id; }).length;
 		return '<tr data-id="' + esc(c.id) + '"><td><input class="inp" value="' + esc(c.title) + '" placeholder="카테고리 이름"></td>'
 			+ '<td class="n">' + (c.id ? "작업 " + n + "개" : "새 카테고리") + '</td><td class="a"><button class="ib" data-mv="-1" title="위로">▲</button>'
 			+ '<button class="ib" data-mv="1" title="아래로">▼</button><button class="ib" data-cdel="' + n + '" title="삭제">✕</button></td></tr>';

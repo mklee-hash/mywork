@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../common/static.js" data-root="../"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업</title>
+<link rel="stylesheet" href="../common/server.css">
+<link rel="stylesheet" href="../common/records.css">
+<style>
+	#main { flex: 1; min-height: 0; display: flex; }
+	#side { width: 250px; flex: none; overflow-y: auto; padding: 12px 0; border-right: 1px solid var(--line); background: #fff; font-size: 13px; }
+	#side .wh { padding: 2px 14px 8px; font-weight: bold; }
+	#side .ti { padding: 7px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
+	#side .ti:hover { background: #f1f5f9; }
+	#side .ti.ov { color: #0f766e; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+	#side .empty { padding: 6px 14px; color: var(--muted); }
+	#content { flex: 1; }
+	.st { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #cbd5e1; vertical-align: middle; }
+	.st.s-진행중 { background: #3b82f6; }
+	.st.s-대기 { background: #f59e0b; }
+	.st.s-완료 { background: #22c55e; }
+	.badge.s-진행중 { background: #dbeafe; color: #1e40af; }
+	.badge.s-대기 { background: #fef3c7; color: #92400e; }
+	.badge.s-완료 { background: #dcfce7; color: #166534; }
+	table.list td.k-title { font-weight: 600; }
+	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
+	table.list td.k-act { width: 40px; text-align: right; }
+	.filters .btn.on { font-weight: bold; }
+	@media (max-width: 900px) { #side { display: none; } }
+</style>
+</head>
+<body>
+<div id="bar">
+	<button class="btn" id="bBack" title="작업 목록으로">← 목록</button>
+	<h2 id="title">…</h2>
+	<span id="meta"></span>
+	<span class="grp filters" id="filters"></span>
+	<span class="spacer"></span>
+	<button class="btn" id="bOverview" title="작업 자체의 설명 · 제목 · 카테고리 · 상태">작업 개요</button>
+	<button class="btn primary rw" id="bAdd" title="이 작업에 할일 추가">＋ 할일 추가</button>
+</div>
+<div id="main">
+	<div id="side"></div>
+	<div id="content"></div>
+</div>
+<div id="status">
+	<span id="sInfo"></span>
+	<span class="spacer"></span>
+	<span id="msg"></span>
+</div>
+
+<script>
+	var EXT = window.MK_EXT || ".jsp";
+	var API = "../common/data.jsp?space=work";
+	var STATUS = ["진행중", "대기", "완료"];
+	var QS = new URLSearchParams(location.search);
+	var ID = (QS.get("id") || "").replace(/[^a-z0-9]/g, "");
+	var CAT = (QS.get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
+	var work = null, todos = [], cats = [], filter = "";
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+	function catTitle(id) { var c = cats.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
+	function docUrl(id) { return "../common/doc" + EXT + "?space=work&doc=" + encodeURIComponent(id) + "&cat=" + CAT; }
+
+	function render() {
+		$("title").textContent = work.title || "제목 없음";
+		document.title = (work.title || "작업") + " - 할일";
+		$("meta").innerHTML = '<span class="badge">' + esc(catTitle(work.category)) + '</span> <span class="badge s-' + esc(work.status) + '">' + esc(work.status || "-") + "</span>";
+		$("filters").innerHTML = [""].concat(STATUS).map(function (s) {
+			var n = todos.filter(function (t) { return !s || t.status === s; }).length;
+			return '<button class="btn' + (filter === s ? " on" : "") + '" data-f="' + esc(s) + '">' + (s || "전체") + " " + n + "</button>";
+		}).join("");
+		// 왼쪽: 작업 개요 + 할일
+		$("side").innerHTML = '<div class="wh">할일 <span class="muted">' + todos.length + "</span></div>"
+			+ '<div class="ti ov" data-open="' + esc(work.id) + '">📄 작업 개요</div>'
+			+ (todos.length ? todos.map(function (t) {
+				return '<div class="ti" data-open="' + esc(t.id) + '" title="' + esc(t.title) + '"><span class="st s-' + esc(t.status) + '"></span>' + esc(t.title || "제목 없음") + "</div>";
+			}).join("") : '<div class="empty">할일이 없습니다.</div>');
+		// 가운데: 할일 표
+		var rows = todos.filter(function (t) { return !filter || t.status === filter; });
+		var h = ['<section class="card"><header><h3>할일 목록</h3><span class="cnt">' + rows.length + "</span></header>"];
+		if (!rows.length) h.push('<div class="empty">' + (todos.length ? "조건에 맞는 할일이 없습니다." : "아직 할일이 없습니다." + (window.MK_STATIC ? "" : " [＋ 할일 추가]로 넣으세요.")) + "</div>");
+		else {
+			h.push('<table class="list"><thead><tr><th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
+			rows.forEach(function (t) {
+				h.push('<tr class="row" data-open="' + esc(t.id) + '"><td class="k-title">' + esc(t.title || "제목 없음") + "</td>"
+					+ '<td><span class="badge s-' + esc(t.status) + '">' + esc(t.status || "-") + "</span></td>"
+					+ '<td class="k-date">' + esc(t.createdAt || "-") + '</td><td class="k-date">' + esc(t.savedAt || "-") + "</td>"
+					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(t.id) + '" title="삭제">✕</button></td></tr>');
+			});
+			h.push("</tbody></table>");
+		}
+		$("content").innerHTML = h.join("") + "</section>";
+		var done = todos.filter(function (t) { return t.status === "완료"; }).length;
+		$("sInfo").textContent = "할일 " + todos.length + "개 · 완료 " + done + "개";
+	}
+
+	function load() {
+		return Promise.all([
+			fetch(API + "&list=1", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
+			fetch(API + "&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; })
+		]).then(function (x) {
+			cats = x[1];
+			work = x[0].filter(function (w) { return w.id === ID; })[0];
+			if (!work) throw new Error("없는 작업입니다.");
+			// 할일은 만든 순서
+			todos = x[0].filter(function (t) { return t.parent === ID; })
+				.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+			render();
+		}).catch(function (e) { $("title").textContent = "불러오기 실패"; msg(e.message, "err"); });
+	}
+
+	$("bBack").onclick = function () { location.href = "index" + EXT + "?cat=" + CAT; };
+	$("bOverview").onclick = function () { location.href = docUrl(ID); };
+	document.addEventListener("click", function (e) {
+		var b = e.target.closest("[data-f]");
+		if (b) { filter = b.getAttribute("data-f"); render(); return; }
+		b = e.target.closest("[data-del]");
+		if (b) {
+			e.stopPropagation();
+			var t = todos.filter(function (x) { return x.id === b.getAttribute("data-del"); })[0];
+			if (!t || !confirm("'" + (t.title || "제목 없음") + "' 할일을 삭제할까요?\n(WEB-INF/data/work/_backup 에 남습니다)")) return;
+			fetch(API + "&doc=" + encodeURIComponent(t.id) + "&delete=1", { method: "POST" }).then(function (r) {
+				if (!r.ok) throw new Error(r.status);
+				msg("삭제했습니다.", "ok");
+				load();
+			}).catch(function (e) { msg("삭제 실패: " + e.message, "err"); });
+			return;
+		}
+		b = e.target.closest("[data-open]");
+		if (b) location.href = docUrl(b.getAttribute("data-open"));
+	});
+
+	$("bAdd").onclick = function () {
+		var t = prompt("할일", "");
+		if (t === null || !t.trim()) return;
+		t = t.trim();
+		var id = "w" + Date.now().toString(36), at = now();
+		var body = { type: "doc", title: t, parent: ID, status: "진행중", createdAt: at, savedAt: at, html: "<h1>" + esc(t) + "</h1><p><br></p>" };
+		fetch(API + "&doc=" + id + "&ver=", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body) })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); msg("할일을 추가했습니다. 눌러서 상세 내용을 쓰세요.", "ok"); return load(); })
+			.catch(function (e) { msg("추가 실패: " + e.message, "err"); });
+	};
+
+	load();
+</script>
+</body>
+</html>
