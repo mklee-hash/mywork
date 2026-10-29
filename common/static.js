@@ -43,11 +43,18 @@
 		if (el) el.textContent = "올린 시각 " + m.publishedAt;
 	});
 
+	// 기억한 키가 지금 올라간 내용과 맞는지 meta.check 로 확인 (PC 에서 비밀번호를 바꾸면 예전 키는 버림)
 	var keyP = null;
 	function getKey() {
 		if (!keyP) {
 			var raw = store();
-			keyP = raw ? crypto.subtle.importKey("raw", unb64(raw), "AES-GCM", false, ["decrypt"]) : Promise.reject(new Error("잠겨 있습니다. 비밀번호를 넣어 주세요."));
+			keyP = !raw ? Promise.reject(new Error("잠겨 있습니다. 비밀번호를 넣어 주세요."))
+				: crypto.subtle.importKey("raw", unb64(raw), "AES-GCM", false, ["decrypt"]).then(function (key) {
+					return metaP.then(function (m) { return decrypt(key, unb64(m.check)); }).then(function () { return key; }, function () {
+						try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (e) {}
+						throw new Error("비밀번호가 바뀌었습니다. 새 비밀번호를 넣어 주세요.");
+					});
+				});
 		}
 		return keyP;
 	}
@@ -131,30 +138,34 @@
 		try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (e) {}
 		location.reload();
 	};
-	if (window.top === window && !store()) {
+	if (window.top === window) {
 		document.addEventListener("DOMContentLoaded", function () {
-			var d = document.createElement("div");
-			d.id = "mkLock";
-			d.innerHTML = '<form><h2>mkwork</h2><p>보기 전용 사이트입니다. 비밀번호를 넣어야 내용이 보입니다.</p>'
-				+ '<input type="password" id="mkPw" placeholder="비밀번호" autocomplete="current-password" autofocus>'
-				+ '<label><input type="checkbox" id="mkKeep"> 이 브라우저에서 기억</label>'
-				+ '<button type="submit">열기</button><div class="err" id="mkErr"></div></form>';
-			document.body.appendChild(d);
-			d.querySelector("form").onsubmit = function (e) {
-				e.preventDefault();
-				var pw = document.getElementById("mkPw").value, err = document.getElementById("mkErr");
-				err.textContent = "확인 중…";
-				metaP.then(function (m) {
-					return crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]).then(function (base) {
-						return crypto.subtle.deriveKey({ name: "PBKDF2", salt: unb64(m.salt), iterations: m.iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, true, ["decrypt"]);
-					}).then(function (key) {
-						return decrypt(key, unb64(m.check)).then(function () { return crypto.subtle.exportKey("raw", key); });
-					});
-				}).then(function (raw) {
-					(document.getElementById("mkKeep").checked ? localStorage : sessionStorage).setItem(KEY, b64(raw));
-					location.reload();
-				}).catch(function () { err.textContent = "비밀번호가 맞지 않습니다."; });
-			};
+			if (!store()) showLock("");
+			else getKey().catch(function (e) { showLock(e.message); });
 		});
+	}
+	function showLock(why) {
+		var d = document.createElement("div");
+		d.id = "mkLock";
+		d.innerHTML = '<form><h2>mkwork</h2><p>' + (why || "보기 전용 사이트입니다. 비밀번호를 넣어야 내용이 보입니다.") + "</p>"
+			+ '<input type="password" id="mkPw" placeholder="비밀번호" autocomplete="current-password" autofocus>'
+			+ '<label><input type="checkbox" id="mkKeep"> 이 브라우저에서 기억</label>'
+			+ '<button type="submit">열기</button><div class="err" id="mkErr"></div></form>';
+		document.body.appendChild(d);
+		d.querySelector("form").onsubmit = function (e) {
+			e.preventDefault();
+			var pw = document.getElementById("mkPw").value, err = document.getElementById("mkErr");
+			err.textContent = "확인 중…";
+			metaP.then(function (m) {
+				return crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]).then(function (base) {
+					return crypto.subtle.deriveKey({ name: "PBKDF2", salt: unb64(m.salt), iterations: m.iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, true, ["decrypt"]);
+				}).then(function (key) {
+					return decrypt(key, unb64(m.check)).then(function () { return crypto.subtle.exportKey("raw", key); });
+				});
+			}).then(function (raw) {
+				(document.getElementById("mkKeep").checked ? localStorage : sessionStorage).setItem(KEY, b64(raw));
+				location.reload();
+			}).catch(function () { err.textContent = "비밀번호가 맞지 않습니다."; });
+		};
 	}
 })();
