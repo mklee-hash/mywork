@@ -1,0 +1,24 @@
+/* 문서 본문 스타일 (편집 화면 + HTML 다운로드 공통) */
+@counter-style circled {
+	system: fixed;
+	symbols: "①" "②" "③" "④" "⑤" "⑥" "⑦" "⑧" "⑨" "⑩" "⑪" "⑫" "⑬" "⑭" "⑮" "⑯" "⑰" "⑱" "⑲" "⑳";
+	suffix: " ";
+}
+.doc { counter-reset: h1; font-family: "맑은 고딕", "Malgun Gothic", sans-serif; font-size: 14px; line-height: 1.7; color: #0f172a; word-break: keep-all; overflow-wrap: anywhere; }
+.doc .title { margin: 0 0 18px; padding-bottom: 10px; border-bottom: 2px solid #0f172a; font-size: 26px; font-weight: bold; }
+.doc h1 { counter-increment: h1; counter-reset: h2; margin: 30px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #cbd5e1; font-size: 21px; }
+.doc h1::before { content: counter(h1) ". "; color: #0d9488; }
+.doc h2 { counter-increment: h2; margin: 22px 0 8px; font-size: 17px; }
+.doc h2::before { content: counter(h1) "." counter(h2) " "; color: #0d9488; }
+.doc h3 { margin: 16px 0 6px; font-size: 15px; }
+.doc p { margin: 0 0 4px; }
+.doc ol, .doc ul { margin: 2px 0 6px; padding-left: 28px; }
+.doc ol.circle { list-style: circled; }
+.doc li { margin: 2px 0; }
+.doc li > p { margin: 4px 0; }
+.doc img { max-width: 100%; height: auto; vertical-align: top; }
+.doc table { border-collapse: collapse; margin: 6px 0 10px; }
+.doc td, .doc th { border: 1px solid #94a3b8; padding: 4px 8px; vertical-align: top; min-width: 40px; }
+.doc td > p, .doc th > p { margin: 0; }
+.doc a { color: #0563c1; }
+.doc hr { border: 0; border-top: 1px solid #cbd5e1; margin: 14px 0; }

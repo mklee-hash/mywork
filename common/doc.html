@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../common/static.js" data-root="../"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문서</title>
+<link rel="stylesheet" href="server.css">
+<link rel="stylesheet" href="doc.css">
+<script src="zip.js"></script>
+<script src="docx.js"></script>
+<style>
+	#main { flex: 1; min-height: 0; display: flex; }
+	#toc { width: 250px; flex: none; overflow-y: auto; padding: 12px 0; border-right: 1px solid var(--line); background: #f8fafc; font-size: 13px; }
+	#toc div { padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	#toc div:hover { background: #e2e8f0; }
+	#toc .l2 { padding-left: 30px; color: #334155; }
+	#toc .l3 { padding-left: 46px; color: var(--muted); font-size: 12px; }
+	#toc .n { color: var(--accent); margin-right: 4px; }
+	#paper { flex: 1; min-width: 0; overflow-y: auto; background: #e2e8f0; padding: 20px; }
+	#ed { max-width: 860px; min-height: 100%; margin: 0 auto; padding: 40px 56px 80px; background: #fff; box-shadow: 0 1px 4px rgba(15, 23, 42, .15); outline: none; }
+	#ed img.on { outline: 3px solid var(--accent); }
+	#imgbar { position: fixed; z-index: 60; display: none; gap: 4px; padding: 4px; background: #0f172a; border-radius: 6px; }
+	#imgbar .btn { height: 24px; padding: 0 8px; font-size: 12px; }
+	select.inp { padding: 0 4px; }
+	#tTitle { width: 340px; font-size: 15px; font-weight: bold; }
+	.work #title { display: none; }
+	body:not(.work) .wonly { display: none; }
+	@media (max-width: 900px) { #toc { display: none; } #ed { padding: 24px; } }
+</style>
+</head>
+<body>
+<div id="bar">
+	<button class="btn wonly" id="bBack" title="작업 목록으로">← 목록</button>
+	<h2 id="title">…</h2>
+	<input class="inp wonly" id="tTitle" placeholder="작업 제목" title="작업 제목">
+	<select class="inp wonly" id="tCat" title="카테고리"><option value="">미분류</option></select>
+	<select class="inp wonly" id="tStatus" title="상태"><option>진행중</option><option>대기</option><option>완료</option></select>
+	<button class="btn primary" id="bSave" title="저장 (Ctrl+S)">저장</button>
+	<button class="btn" id="bDocx" title="지금 내용(저장 안 한 수정 포함)을 Word(.docx)로 다운로드">⬇ Word 다운로드</button>
+	<button class="btn" id="bHtml" title="그림까지 들어간 HTML 한 파일로 다운로드">⬇ HTML</button>
+	<span class="sep"></span>
+	<span class="grp" id="tools">
+		<select class="inp" id="block" title="문단 모양">
+			<option value="p">본문</option>
+			<option value="h1">제목 1</option>
+			<option value="h2">제목 2</option>
+			<option value="h3">제목 3</option>
+		</select>
+		<button class="btn icon" data-c="bold" title="굵게 (Ctrl+B)">B</button>
+		<button class="btn icon" data-c="italic" title="기울임 (Ctrl+I)"><i>I</i></button>
+		<button class="btn icon" data-c="underline" title="밑줄 (Ctrl+U)"><u>U</u></button>
+		<button class="btn icon" data-c="strikeThrough" title="취소선"><s>S</s></button>
+		<span class="pal" data-f="foreColor"><button class="btn" title="글자색">글자<span class="sw" style="background:#dc2626"></span></button><div class="pop"></div></span>
+		<span class="pal" data-f="hiliteColor"><button class="btn" title="형광펜">형광<span class="sw" style="background:#fde047"></span></button><div class="pop"></div></span>
+		<button class="btn" data-c="insertOrderedList" title="번호 목록">1.</button>
+		<button class="btn" data-c="insertUnorderedList" title="글머리 목록">•</button>
+		<button class="btn icon" data-c="outdent" title="내어쓰기">⇤</button>
+		<button class="btn icon" data-c="indent" title="들여쓰기">⇥</button>
+		<button class="btn" data-x="link" title="링크 (Ctrl+K)">링크</button>
+		<button class="btn" data-x="image" title="그림 넣기 (붙여 넣기도 됨)">그림</button>
+		<button class="btn" data-x="table" title="표 넣기">표</button>
+		<button class="btn" data-c="removeFormat" title="글자 서식 지우기">서식 지우기</button>
+	</span>
+	<span class="spacer"></span>
+	<button class="btn" id="bHist" title="저장 이력(백업)">이력</button>
+</div>
+<div id="main">
+	<div id="toc"></div>
+	<div id="paper"><div id="ed" class="doc" contenteditable="true" spellcheck="false"></div></div>
+</div>
+<div id="status">
+	<span id="sInfo"></span>
+	<span class="spacer"></span>
+	<span id="msg"></span>
+</div>
+<div id="imgbar">
+	<button class="btn" data-w="0.25">25%</button><button class="btn" data-w="0.5">50%</button><button class="btn" data-w="0.75">75%</button>
+	<button class="btn" data-w="1">원래 크기</button><button class="btn" data-w="open">새 창</button><button class="btn" data-w="del">삭제</button>
+</div>
+<div id="ctx"></div>
+<input type="file" id="file" accept="image/*" style="display:none">
+<div id="drawer">
+	<button class="x" id="bHistX">×</button>
+	<h3>저장 이력</h3>
+	<div class="muted">저장할 때마다 저장 전 내용이 백업됩니다. [불러오기] 후 [저장]하면 그 내용으로 되돌아갑니다.</div>
+	<div class="note" id="importNote">원본 파일에서 다시 가져오기 (지금 내용은 백업됨):<br><code id="importCmd"></code></div>
+	<table id="histList"></table>
+</div>
+
+<script>
+	var QS = new URLSearchParams(location.search);
+	var SPACE = QS.get("space") === "work" ? "work" : "server";
+	var DOC = (QS.get("doc") || "").replace(/[^a-z0-9_-]/g, "");
+	var API = "data.jsp?space=" + SPACE + "&doc=" + encodeURIComponent(DOC);
+	var WORK = SPACE === "work";
+	if (WORK) document.body.classList.add("work");
+	var PALETTE = ["#000000", "#404040", "#808080", "#C00000", "#FF0000", "#FFC000", "#FFFF00", "#92D050",
+		"#00B050", "#00B0F0", "#0070C0", "#002060", "#7030A0", "#FDE047", "#BBF7D0", "#BFDBFE",
+		"#FBCFE8", "#FED7AA", "#E9D5FF", "#F1F5F9", "#99F6E4", "#FECACA", "#D9D9D9", "#FFFFFF"];
+	var data = null, ver = "", dirty = false, savedRange = null, curImg = null;
+	var ed = document.getElementById("ed");
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+	function imgUrl(n) { return API + "&img=" + encodeURIComponent(n); }
+	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+	function markDirty() { dirty = true; $("bSave").classList.add("dirty"); }
+	function cmd(c, v) { ed.focus(); restoreRange(); document.execCommand("styleWithCSS", false, true); document.execCommand(c, false, v == null ? null : v); markDirty(); updateToc(); }
+
+	// 도구 버튼을 누르면 편집기 선택 영역이 사라지지 않게 기억
+	function saveRange() {
+		var s = window.getSelection();
+		if (s.rangeCount && ed.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange();
+	}
+	function restoreRange() {
+		if (!savedRange) return;
+		var s = window.getSelection();
+		if (s.rangeCount && ed.contains(s.anchorNode)) return;
+		s.removeAllRanges();
+		s.addRange(savedRange);
+	}
+	document.addEventListener("selectionchange", function () { saveRange(); syncBlock(); });
+
+	function render() {
+		if (WORK) { $("sInfo").textContent = "만든 날 " + (data.createdAt || "-") + " · 저장 " + (data.savedAt || "-"); return; }
+		var src = String(data.source || "").split(/[\\\/]/).pop();
+		$("sInfo").innerHTML = '원본 <b title="' + esc(data.source) + '">' + esc(src) + "</b> · 가져옴 " + esc(data.importedAt || "-") + " · 저장 " + esc(data.savedAt || "-");
+	}
+	// 다운로드 파일 이름: 서버관리는 원본 파일 이름, 작업은 제목
+	function fileBase() { return WORK ? String(data.title || "작업").replace(/[\\\/:*?"<>|]/g, "_") : sourceBase(data.source); }
+	$("bBack").onclick = function () {
+		location.href = "../work/index" + (window.MK_EXT || ".jsp") + "?cat=" + encodeURIComponent((QS.get("cat") || "all").replace(/[^a-z0-9_-]/g, ""));
+	};
+	// 카테고리 목록: work/menu.json (all 빼고)
+	var catsP = WORK ? fetch("../work/menu.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (cs) {
+		cs.forEach(function (c) { if (c.id !== "all") $("tCat").insertAdjacentHTML("beforeend", '<option value="' + esc(c.id) + '">' + esc(c.title) + "</option>"); });
+	}).catch(function () {}) : Promise.resolve();
+	$("tCat").addEventListener("change", markDirty);
+	$("tTitle").addEventListener("input", markDirty);
+	$("tStatus").addEventListener("change", markDirty);
+
+	// ---------------------------------------------------------------- 목차
+	var tocTimer = null;
+	function updateToc() {
+		clearTimeout(tocTimer);
+		tocTimer = setTimeout(function () {
+			var n1 = 0, n2 = 0, hs = ed.querySelectorAll("h1, h2, h3");
+			$("toc").innerHTML = Array.prototype.map.call(hs, function (h, i) {
+				var lv = +h.tagName.charAt(1), num = "";
+				if (lv === 1) { n1++; n2 = 0; num = n1 + "."; } else if (lv === 2) { n2++; num = n1 + "." + n2; }
+				return '<div class="l' + lv + '" data-i="' + i + '" title="' + esc(h.textContent) + '"><span class="n">' + num + "</span>" + esc(h.textContent) + "</div>";
+			}).join("") || '<div class="muted">제목이 없습니다</div>';
+		}, 200);
+	}
+	$("toc").addEventListener("click", function (e) {
+		var d = e.target.closest("[data-i]");
+		if (!d) return;
+		var h = ed.querySelectorAll("h1, h2, h3")[+d.getAttribute("data-i")];
+		if (h) h.scrollIntoView({ block: "start", behavior: "smooth" });
+	});
+
+	// ---------------------------------------------------------------- 도구
+	function syncBlock() {
+		var s = window.getSelection();
+		if (!s.rangeCount || !ed.contains(s.anchorNode)) return;
+		var n = s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentNode;
+		var b = n.closest("h1, h2, h3");
+		$("block").value = b && ed.contains(b) ? b.tagName.toLowerCase() : "p";
+	}
+	$("block").addEventListener("change", function () { cmd("formatBlock", "<" + this.value + ">"); });
+	document.querySelectorAll("#tools .btn, #tools .pal").forEach(function (b) {
+		b.addEventListener("mousedown", function (e) { e.preventDefault(); });
+	});
+	$("tools").addEventListener("click", function (e) {
+		var b = e.target.closest("button");
+		if (!b) return;
+		if (b.hasAttribute("data-c")) cmd(b.getAttribute("data-c"));
+		else if (b.getAttribute("data-x") === "link") insertLink();
+		else if (b.getAttribute("data-x") === "image") $("file").click();
+		else if (b.getAttribute("data-x") === "table") insertTable();
+	});
+	document.querySelectorAll(".pal").forEach(function (p) {
+		var k = p.getAttribute("data-f"), pop = p.querySelector(".pop");
+		pop.innerHTML = PALETTE.map(function (c) { return '<span style="background:' + c + '" data-c="' + c + '" title="' + c + '"></span>'; }).join("")
+			+ '<span class="none" data-c="">' + (k === "hiliteColor" ? "형광 없음" : "기본 글자색") + "</span>";
+		p.querySelector("button").addEventListener("click", function (e) {
+			e.stopPropagation();
+			document.querySelectorAll(".pal.open").forEach(function (o) { if (o !== p) o.classList.remove("open"); });
+			p.classList.toggle("open");
+		});
+		pop.addEventListener("click", function (e) {
+			var s = e.target.closest("[data-c]");
+			if (!s) return;
+			p.classList.remove("open");
+			var c = s.getAttribute("data-c");
+			cmd(k, c || (k === "hiliteColor" ? "transparent" : "#0f172a"));
+		});
+	});
+	document.addEventListener("click", function () { document.querySelectorAll(".pal.open").forEach(function (o) { o.classList.remove("open"); }); });
+
+	function insertLink() {
+		restoreRange();
+		var s = window.getSelection(), n = s.anchorNode, a = n && (n.nodeType === 1 ? n : n.parentNode).closest("a");
+		var v = prompt("링크 주소 (비우면 링크 삭제)", a && ed.contains(a) ? a.getAttribute("href") : "https://");
+		if (v === null) return;
+		v = v.trim();
+		if (!v || v === "https://") { if (a) { var r = document.createRange(); r.selectNodeContents(a); s.removeAllRanges(); s.addRange(r); } cmd("unlink"); return; }
+		if (a && ed.contains(a)) { a.setAttribute("href", v); markDirty(); return; }
+		if (s.isCollapsed) cmd("insertHTML", '<a href="' + esc(v) + '">' + esc(v) + "</a>");
+		else cmd("createLink", v);
+	}
+	function insertTable() {
+		var v = prompt("표 크기 (행x열)", "3x3");
+		if (!v) return;
+		var m = /(\d+)\s*[x×*,]\s*(\d+)/.exec(v);
+		if (!m) return;
+		var r = Math.min(+m[1], 50), c = Math.min(+m[2], 12), h = "<table>";
+		for (var i = 0; i < r; i++) { h += "<tr>"; for (var j = 0; j < c; j++) h += "<td><br></td>"; h += "</tr>"; }
+		cmd("insertHTML", h + "</table><p><br></p>");
+	}
+
+	// 그림: 서버에 올리고 넣기
+	function uploadImage(file) {
+		var ext = (file.type.split("/")[1] || "png").replace("jpeg", "jpg").replace(/[^a-z]/g, "");
+		msg("그림 올리는 중…");
+		return fetch(API + "&upload=" + ext, { method: "POST", body: file })
+			.then(function (r) { return r.json(); })
+			.then(function (j) {
+				if (!j.name) throw new Error(j.error || "실패");
+				return new Promise(function (ok) {
+					var im = new Image();
+					im.onload = function () {
+						var w = im.naturalWidth, h = im.naturalHeight;
+						if (w > 740) { h = Math.round(h * 740 / w); w = 740; }
+						cmd("insertHTML", '<img src="' + imgUrl(j.name) + '" width="' + w + '" height="' + h + '">');
+						msg("그림을 넣었습니다.", "ok");
+						ok();
+					};
+					im.src = imgUrl(j.name);
+				});
+			})
+			.catch(function (e) { msg("그림 올리기 실패: " + e.message, "err"); });
+	}
+	$("file").addEventListener("change", function () { if (this.files[0]) uploadImage(this.files[0]); this.value = ""; });
+
+	// 붙여 넣기: 그림은 서버로, HTML 은 정리해서
+	ed.addEventListener("paste", function (e) {
+		var cd = e.clipboardData;
+		var file = Array.prototype.filter.call(cd.files || [], function (f) { return /^image\//.test(f.type); })[0];
+		if (file) { e.preventDefault(); saveRange(); uploadImage(file); return; }
+		var html = cd.getData("text/html");
+		if (!html) return;
+		e.preventDefault();
+		var t = document.createElement("template");
+		t.innerHTML = html.replace(/<!--[\s\S]*?-->/g, "");
+		t.content.querySelectorAll("script, style, meta, link, title, xml, o\\:p").forEach(function (n) { n.remove(); });
+		t.content.querySelectorAll("*").forEach(function (n) {
+			Array.prototype.slice.call(n.attributes).forEach(function (a) {
+				if (/^(href|src|colspan|rowspan|width|height|start|type)$/.test(a.name)) return;
+				if (a.name === "style") {
+					var keep = [];
+					["color", "background-color", "font-weight", "font-style", "text-decoration", "text-align"].forEach(function (p) {
+						var v = n.style.getPropertyValue(p);
+						if (v && !/windowtext|initial|inherit/.test(v)) keep.push(p + ":" + v);
+					});
+					if (keep.length) { n.setAttribute("style", keep.join(";")); return; }
+				}
+				n.removeAttribute(a.name);
+			});
+		});
+		cmd("insertHTML", t.innerHTML);
+	});
+
+	// 그림 크기/삭제
+	function hideImgBar() { $("imgbar").style.display = "none"; if (curImg) curImg.classList.remove("on"); curImg = null; }
+	ed.addEventListener("click", function (e) {
+		if (e.target.tagName === "IMG") {
+			hideImgBar();
+			curImg = e.target;
+			curImg.classList.add("on");
+			var b = curImg.getBoundingClientRect(), bar = $("imgbar");
+			bar.style.display = "flex";
+			bar.style.left = Math.max(8, b.left) + "px";
+			bar.style.top = Math.max(8, b.top - 34) + "px";
+			return;
+		}
+		hideImgBar();
+		if (e.ctrlKey) { var a = e.target.closest("a"); if (a) window.open(a.href, "_blank"); }
+	});
+	$("paper").addEventListener("scroll", hideImgBar);
+	$("imgbar").addEventListener("click", function (e) {
+		var w = e.target.getAttribute("data-w");
+		if (!w || !curImg) return;
+		if (w === "open") { window.open(curImg.src, "_blank"); return; }
+		if (w === "del") { curImg.remove(); hideImgBar(); markDirty(); return; }
+		var nw = Math.round(curImg.naturalWidth * w), nh = Math.round(curImg.naturalHeight * w);
+		curImg.setAttribute("width", nw);
+		curImg.setAttribute("height", nh);
+		markDirty();
+		hideImgBar();
+	});
+
+	// 표 메뉴 (오른쪽 클릭)
+	function showMenu(x, y, items) {
+		var m = $("ctx");
+		m.innerHTML = items.map(function (it, i) { return it ? '<div data-i="' + i + '">' + esc(it[0]) + "</div>" : "<hr>"; }).join("");
+		m.style.display = "block";
+		m.style.left = Math.min(x, innerWidth - m.offsetWidth - 8) + "px";
+		m.style.top = Math.min(y, innerHeight - m.offsetHeight - 8) + "px";
+		m.onclick = function (e) {
+			var d = e.target.closest("[data-i]");
+			if (!d) return;
+			m.style.display = "none";
+			items[+d.getAttribute("data-i")][1]();
+			markDirty();
+		};
+	}
+	document.addEventListener("mousedown", function (e) { if (!e.target.closest("#ctx")) $("ctx").style.display = "none"; if (!e.target.closest("#imgbar") && e.target.tagName !== "IMG") hideImgBar(); });
+	ed.addEventListener("contextmenu", function (e) {
+		var td = e.target.closest("td, th");
+		if (!td || !ed.contains(td)) return;
+		e.preventDefault();
+		var tr = td.parentNode, table = td.closest("table"), ci = Array.prototype.indexOf.call(tr.children, td);
+		function newRow() { var r = document.createElement("tr"); Array.prototype.forEach.call(tr.children, function (c) { var n = document.createElement(c.tagName); n.colSpan = c.colSpan; n.innerHTML = "<br>"; r.appendChild(n); }); return r; }
+		function eachRow(fn) { Array.prototype.forEach.call(table.rows, function (r) { fn(r); }); }
+		showMenu(e.clientX, e.clientY, [
+			["위에 행 추가", function () { tr.parentNode.insertBefore(newRow(), tr); }],
+			["아래에 행 추가", function () { tr.parentNode.insertBefore(newRow(), tr.nextSibling); }],
+			["왼쪽에 열 추가", function () { eachRow(function (r) { var c = r.children[Math.min(ci, r.children.length - 1)]; var n = document.createElement("td"); n.innerHTML = "<br>"; r.insertBefore(n, c || null); }); }],
+			["오른쪽에 열 추가", function () { eachRow(function (r) { var c = r.children[ci]; var n = document.createElement("td"); n.innerHTML = "<br>"; r.insertBefore(n, c ? c.nextSibling : null); }); }],
+			null,
+			["행 삭제", function () { if (table.rows.length > 1) tr.remove(); else table.remove(); }],
+			["열 삭제", function () { eachRow(function (r) { var c = r.children[ci]; if (c) c.remove(); }); if (!table.querySelector("td, th")) table.remove(); }],
+			["표 삭제", function () { if (confirm("표를 삭제할까요?")) table.remove(); }]
+		]);
+	});
+
+	ed.addEventListener("input", function () { markDirty(); updateToc(); });
+
+	// ---------------------------------------------------------------- 저장 / 다운로드 / 이력
+	var saving = false;
+	function save(force) {
+		if (!data || saving) return;
+		saving = true;
+		hideImgBar();
+		msg("저장 중…");
+		var body = WORK
+			? { type: "doc", title: $("tTitle").value.trim() || "제목 없음", category: $("tCat").value, status: $("tStatus").value, createdAt: data.createdAt || now(), savedAt: now(), html: ed.innerHTML }
+			: { type: "doc", title: data.title, source: data.source, importedAt: data.importedAt, savedAt: now(), html: ed.innerHTML };
+		fetch(API + "&ver=" + encodeURIComponent(ver) + (force ? "&force=1" : ""), {
+			method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body)
+		}).then(function (r) {
+			return r.json().then(function (j) { return { s: r.status, j: j }; });
+		}).then(function (x) {
+			saving = false;
+			if (x.s === 409) {
+				if (confirm("다른 창에서 먼저 저장한 내용이 있습니다.\n지금 화면 내용으로 덮어쓸까요? (먼저 저장된 내용은 이력에 남습니다)")) save(true);
+				else msg("저장하지 않았습니다.", "err");
+				return;
+			}
+			if (x.s !== 200) throw new Error(x.j.error || x.s);
+			ver = x.j.ver;
+			data.savedAt = x.j.savedAt;
+			if (WORK) { data.title = body.title; data.category = body.category; data.status = body.status; data.createdAt = body.createdAt; document.title = body.title + " - 작업"; }
+			dirty = false;
+			$("bSave").classList.remove("dirty");
+			render();
+			msg("저장했습니다. " + x.j.savedAt, "ok");
+		}).catch(function (e) {
+			saving = false;
+			msg("저장 실패: " + e.message, "err");
+		});
+	}
+	$("bSave").onclick = function () { save(false); };
+	$("bDocx").onclick = function () {
+		hideImgBar();
+		msg("Word 파일 만드는 중…");
+		buildDocx(ed).then(function (blob) {
+			downloadBlob(blob, fileBase() + ".docx");
+			msg(dirty ? "다운로드했습니다. (저장하지 않은 수정 포함)" : "다운로드했습니다.", "ok");
+		}).catch(function (e) { msg("다운로드 실패: " + e.message, "err"); });
+	};
+	$("bHtml").onclick = function () {
+		hideImgBar();
+		msg("HTML 만드는 중…");
+		var clone = ed.cloneNode(true);
+		clone.removeAttribute("contenteditable");
+		var imgs = Array.prototype.slice.call(clone.querySelectorAll("img"));
+		Promise.all([fetch("doc.css").then(function (r) { return r.text(); })].concat(imgs.map(function (im) {
+			if (/^data:/.test(im.getAttribute("src"))) return null;
+			return fetch(im.src).then(function (r) { return r.blob(); }).then(function (b) {
+				return new Promise(function (ok) { var fr = new FileReader(); fr.onload = function () { im.src = fr.result; ok(); }; fr.readAsDataURL(b); });
+			});
+		}))).then(function (res) {
+			var html = '<!DOCTYPE html>\n<html><head><meta charset="UTF-8"><title>' + esc(data.title) + "</title><style>" + res[0]
+				+ "\nbody{margin:0;background:#f1f5f9}.doc{max-width:860px;margin:20px auto;padding:40px 56px;background:#fff}</style></head><body>"
+				+ '<div class="doc">' + clone.innerHTML + "</div></body></html>";
+			downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), fileBase() + ".html");
+			msg("다운로드했습니다.", "ok");
+		}).catch(function (e) { msg("다운로드 실패: " + e.message, "err"); });
+	};
+	$("bHist").onclick = function () {
+		$("drawer").classList.add("open");
+		$("importNote").style.display = WORK ? "none" : "";
+		$("importCmd").textContent = 'python -I -X utf8 C:\\dev\\workspace\\mkwork\\tools\\import_sources.py ' + DOC + " --force";
+		$("histList").innerHTML = '<tr><td class="muted">불러오는 중…</td></tr>';
+		fetch(API + "&backups=1", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (list) {
+			$("histList").innerHTML = list.length ? list.map(function (b) {
+				return "<tr><td>" + esc(b.time) + (/_import\.json$/.test(b.name) ? ' <span class="muted">(다시 가져오기 전)</span>' : "") + '</td><td class="muted">' + Math.ceil(b.size / 1024) + 'KB</td><td><button class="btn" data-b="' + esc(b.name) + '">불러오기</button></td></tr>';
+			}).join("") : '<tr><td class="muted">아직 이력이 없습니다.</td></tr>';
+		});
+	};
+	$("bHistX").onclick = function () { $("drawer").classList.remove("open"); };
+	$("histList").addEventListener("click", function (e) {
+		var b = e.target.closest("[data-b]");
+		if (!b) return;
+		if (dirty && !confirm("저장하지 않은 수정이 있습니다. 백업을 불러올까요?")) return;
+		fetch(API + "&backup=" + encodeURIComponent(b.getAttribute("data-b")), { cache: "no-store" })
+			.then(function (r) { return r.json(); })
+			.then(function (j) {
+				ed.innerHTML = j.html || "";
+				if (WORK) { $("tTitle").value = j.title || ""; $("tCat").value = j.category || ""; $("tStatus").value = j.status || "진행중"; }
+				markDirty();
+				updateToc();
+				$("drawer").classList.remove("open");
+				msg("백업을 불러왔습니다. [저장]하면 이 내용으로 바뀝니다.", "ok");
+			});
+	});
+
+	document.addEventListener("keydown", function (e) {
+		var k = e.key.toLowerCase();
+		if ((e.ctrlKey || e.metaKey) && k === "s") { e.preventDefault(); save(false); }
+		else if ((e.ctrlKey || e.metaKey) && k === "k" && ed.contains(document.activeElement)) { e.preventDefault(); insertLink(); }
+		else if (k === "escape") { $("drawer").classList.remove("open"); $("ctx").style.display = "none"; hideImgBar(); }
+	});
+	window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+	// ---------------------------------------------------------------- 시작
+	fetch(API, { cache: "no-store" }).then(function (r) {
+		if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || r.status); });
+		ver = r.headers.get("X-Ver") || "";
+		return r.json();
+	}).then(function (j) {
+		data = j;
+		$("title").textContent = data.title || DOC;
+		document.title = (data.title || DOC) + (WORK ? " - 작업" : " - 서버 관리");
+		if (WORK) { $("tTitle").value = data.title || ""; $("tStatus").value = data.status || "진행중"; catsP.then(function () { $("tCat").value = data.category || ""; }); }
+		ed.innerHTML = data.html || "<p><br></p>";
+		document.execCommand("defaultParagraphSeparator", false, "p");
+		render();
+		updateToc();
+	}).catch(function (e) {
+		$("title").textContent = "불러오기 실패";
+		msg(e.message, "err");
+	});
+</script>
+</body>
+</html>

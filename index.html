@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="common/static.js" data-root=""></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mkwork</title>
+<style>
+	:root { --top: #0f172a; --side: #1e293b; --side-fg: #cbd5e1; --accent: #14b8a6; }
+	* { box-sizing: border-box; }
+	html, body { margin: 0; height: 100%; font-family: "맑은 고딕", "Malgun Gothic", sans-serif; font-size: 14px; }
+	body { display: flex; flex-direction: column; }
+	#top { flex: none; display: flex; align-items: stretch; gap: 4px; padding: 0 12px; background: var(--top); color: #e2e8f0; }
+	#top h1 { margin: 0 18px 0 4px; font-size: 18px; line-height: 46px; color: #fff; letter-spacing: .5px; }
+	#top h1 a { color: inherit; text-decoration: none; }
+	#tabs { display: flex; gap: 2px; overflow-x: auto; }
+	#tabs a { display: flex; align-items: center; padding: 0 16px; color: #94a3b8; text-decoration: none; border-bottom: 3px solid transparent; white-space: nowrap; }
+	#tabs a:hover { color: #fff; background: #1e293b; }
+	#tabs a.on { color: #fff; border-bottom-color: var(--accent); font-weight: bold; }
+	#top .spacer { flex: 1; }
+	#top .tb { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8; white-space: nowrap; }
+	#top button { height: 28px; padding: 0 10px; border: 1px solid #334155; border-radius: 5px; background: #1e293b; color: #e2e8f0; font: inherit; font-size: 12px; cursor: pointer; }
+	#top button:hover { background: #334155; }
+	#wrap { flex: 1; min-height: 0; display: flex; }
+	#side { width: 210px; flex: none; background: var(--side); color: var(--side-fg); display: flex; flex-direction: column; }
+	#side.hide { display: none; }
+	#menu { list-style: none; margin: 0; padding: 6px 0; overflow-y: auto; flex: 1; }
+	#menu li { position: relative; padding: 10px 34px 10px 16px; cursor: pointer; border-left: 3px solid transparent; }
+	#menu li:hover { background: #334155; }
+	#menu li.on { background: #0f172a; border-left-color: var(--accent); color: #fff; }
+	#menu .nw { position: absolute; top: 10px; right: 10px; color: #94a3b8; text-decoration: none; display: none; }
+	#menu li:hover .nw, #menu li.on .nw { display: block; }
+	#foot { padding: 10px 16px; border-top: 1px solid #334155; font-size: 11px; color: #94a3b8; line-height: 1.6; }
+	#frame { flex: 1; border: 0; height: 100%; background: #fff; }
+	/* GitHub 올리기 */
+	#pub { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .45); }
+	#pub.open { display: flex; }
+	#pub .box { width: 460px; max-width: calc(100% - 32px); padding: 20px 22px; background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(15, 23, 42, .3); font-size: 13px; color: #0f172a; }
+	#pub h3 { margin: 0 0 6px; font-size: 16px; }
+	#pub p { margin: 0 0 12px; color: #64748b; line-height: 1.6; }
+	#pub input { width: 100%; height: 32px; margin-bottom: 8px; padding: 0 10px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; }
+	#pub .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+	#pub button { height: 30px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; font: inherit; cursor: pointer; }
+	#pub button.primary { background: #0d9488; border-color: #0d9488; color: #fff; }
+	#pub pre { max-height: 220px; overflow: auto; margin: 10px 0 0; padding: 8px 10px; background: #f1f5f9; border-radius: 6px; font-size: 12px; white-space: pre-wrap; }
+	#pub .err { color: #b91c1c; }
+	#pub .ok { color: #0f766e; }
+	@media (max-width: 720px) { #wrap { flex-direction: column; } #side { width: 100%; max-height: 30%; } #top h1 { margin-right: 6px; } }
+</style>
+</head>
+<body>
+<div id="top">
+	<h1><a href="#">mkwork</a></h1>
+	<nav id="tabs"></nav>
+	<span class="spacer"></span>
+	<span class="tb" id="tbar"></span>
+</div>
+<div id="wrap">
+	<div id="side">
+		<ul id="menu"></ul>
+		<div id="foot"></div>
+	</div>
+	<iframe id="frame" name="frame"></iframe>
+</div>
+<div id="pub">
+	<div class="box">
+		<h3>GitHub 보기 사이트</h3>
+		<p>작업내역 · 서버관리 내용을 비밀번호로 암호화해서 GitHub Pages(보기 전용)에 올립니다. 밖에서는 이 비밀번호를 넣어야 볼 수 있습니다.
+			비밀번호를 정해 두면 <b>저장할 때마다 15초 뒤 자동으로 반영</b>됩니다. <b>비밀번호 자체는 저장되지 않으니 잊지 마세요.</b></p>
+		<p id="pubState"></p>
+		<div class="row" id="pubOn"><button id="pubOff">자동 반영 끄기</button><span style="flex:1"></span><button class="primary" id="pubNow">지금 올리기</button></div>
+		<p id="pubPwLabel" style="margin-top:12px"></p>
+		<input type="password" id="pw1" placeholder="비밀번호 (4자 이상)" autocomplete="new-password">
+		<input type="password" id="pw2" placeholder="비밀번호 확인" autocomplete="new-password">
+		<div class="row"><span id="pubMsg" style="flex:1"></span><button id="pubClose">닫기</button><button class="primary" id="pubGo">비밀번호 정하고 올리기</button></div>
+		<pre id="pubLog" style="display:none"></pre>
+	</div>
+</div>
+
+<script type="application/json" id="rootMenu">[
+  {"id": "work", "title": "작업내역", "local": true, "menu": "work/menu.json"},
+  {"id": "server", "title": "서버관리", "local": true, "menu": "server/menu.json"},
+  {"id": "skill", "title": "스킬", "items": [{"id": "home", "title": "스킬", "path": "common/soon", "query": "m=skill"}]},
+  {"id": "test", "title": "테스트", "menu": "test/menu.json", "pcOnly": true}
+]
+</script>
+<script type="application/json" id="subMenus">{"work/menu.json":[
+  { "id": "all", "title": "전체", "desc": "모든 작업" },
+  { "id": "dev", "title": "시스템개발", "desc": "시스템 개발 작업" },
+  { "id": "ai", "title": "AI작업", "desc": "AI 관련 작업" },
+  { "id": "support", "title": "고객지원", "desc": "고객 지원 작업" }
+]
+,"server/menu.json":[
+  {
+    "id": "mail",
+    "title": "공용메일",
+    "type": "records",
+    
+    "desc": "부서 공용메일 · 그룹메일 계정"
+  },
+  {
+    "id": "servers",
+    "title": "부서서버",
+    "type": "records",
+    
+    "desc": "OZC사업부 서버 목록과 서버별 상세 정보"
+  },
+  {
+    "id": "ozpw",
+    "title": "오즈암호",
+    "type": "records",
+    
+    "desc": "운영 · 테스트 · 개인 오즈 서버 admin 암호"
+  },
+  {
+    "id": "vm",
+    "title": "VM관리",
+    "type": "doc",
+    
+    "desc": "오즈컨설팅 VMware 서버 관리 문서"
+  }
+]
+,"test/menu.json":[
+  {
+    "id": "run",
+    "title": "보고서 실행",
+    "path": "run/index.jsp",
+    "desc": "버전(8.0/9.0) · 뷰어(EXE / HTML5 canvas·svg) · ozr/ozd · 뷰어 옵션을 골라 보고서를 실행하고 저장"
+  },
+  {
+    "id": "jqtest",
+    "title": "jQuery 호환 테스트",
+    "path": "jqtest/index.jsp",
+    "desc": "HTML5 뷰어 빌드 × jQuery 세트(2.0.3/3.5.0/3.7.1) 로 미리보기·저장·인쇄 확인 (canvas.jsp 구성)"
+  }
+]}</script>
+<script>
+	var STATIC = !!window.MK_STATIC, EXT = STATIC ? ".html" : ".jsp";
+	var LOCAL = STATIC || true;
+	var tabs = [];
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+	// 대메뉴/하위 메뉴를 하나의 모양으로: { id, title, items: [{ id, title, desc, url }] }
+	(function () {
+		var root = [], subs = {};
+		try { root = JSON.parse($("rootMenu").textContent); subs = JSON.parse($("subMenus").textContent); } catch (e) {}
+		root.forEach(function (t) {
+			if (t.local && !LOCAL) return;
+			var items = t.items || (subs[t.menu] || []).map(function (s) {
+				if (t.id === "work") return { id: s.id, title: s.title, desc: s.desc, path: "work/index", query: "cat=" + encodeURIComponent(s.id) };
+				if (t.id === "server") return { id: s.id, title: s.title, desc: s.desc, path: s.type === "doc" ? "common/doc" : "server/records", query: (s.type === "doc" ? "space=server&" : "") + "doc=" + encodeURIComponent(s.id) };
+				return { id: s.id, title: s.title, desc: s.desc, path: t.menu.replace(/[^\/]+$/, "") + s.path };
+			});
+			items = items.map(function (s) {
+				var u;
+				if (STATIC && t.pcOnly) u = "common/soon.html?m=pc&t=" + encodeURIComponent(s.title);
+				else u = (/\.jsp$/.test(s.path) ? s.path : s.path + EXT) + (s.query ? "?" + s.query : "");
+				return { id: s.id, title: s.title, desc: s.desc || "", url: u };
+			});
+			tabs.push({ id: t.id, title: t.title, items: items, pcOnly: t.pcOnly });
+		});
+	})();
+
+	function route() {
+		var h = decodeURIComponent(location.hash.slice(1)).split("/");
+		var t = tabs.filter(function (x) { return x.id === h[0]; })[0] || tabs[0];
+		if (!t) return;
+		var it = t.items.filter(function (x) { return x.id === h[1]; })[0] || t.items[0];
+		$("tabs").innerHTML = tabs.map(function (x) {
+			return '<a href="#' + esc(x.id) + '"' + (x === t ? ' class="on"' : "") + ">" + esc(x.title) + "</a>";
+		}).join("");
+		$("side").classList.toggle("hide", t.items.length < 2);
+		$("menu").innerHTML = t.items.map(function (x) {
+			return '<li data-id="' + esc(x.id) + '"' + (x === it ? ' class="on"' : "") + ' title="' + esc(x.desc) + '">' + esc(x.title)
+				+ '<a class="nw" href="' + esc(x.url) + '" target="_blank" title="새 창">↗</a></li>';
+		}).join("");
+		$("foot").innerHTML = t.pcOnly ? "OZ 서버가 필요한 화면이라<br>내 PC에서만 동작합니다." : STATIC ? "보기 전용입니다." : "저장할 때마다 이전 내용이<br>백업됩니다.";
+		document.title = (it ? it.title + " - " : "") + "mkwork";
+		if (it && $("frame").getAttribute("src") !== it.url) $("frame").setAttribute("src", it.url);
+	}
+	$("menu").addEventListener("click", function (e) {
+		if (e.target.closest("a")) return;
+		var li = e.target.closest("li[data-id]"), t = $("tabs").querySelector("a.on");
+		if (li && t) location.hash = t.getAttribute("href").slice(1) + "/" + li.getAttribute("data-id");
+	});
+	window.addEventListener("hashchange", route);
+
+	// ---------------------------------------------------------------- 오른쪽 위
+	if (STATIC) {
+		$("tbar").innerHTML = '<span>보기 전용 · <span id="pubAt"></span></span><button id="bLock" title="이 브라우저에서 비밀번호 잊기">잠그기</button>';
+		$("bLock").onclick = function () { MK_LOCK(); };
+	} else if (true) {
+		$("tbar").innerHTML = '<span id="pubSt" title="GitHub 보기 사이트 반영 상태"></span><button id="bPub" title="GitHub 보기 사이트 (암호화해서 올림)">⬆ GitHub</button>';
+		$("bPub").onclick = function () { $("pub").classList.add("open"); pubStatus(); };
+		pubStatus();
+		setInterval(pubStatus, 10000);
+	}
+	// 반영 상태: 대기(저장 후 15초) / 올리는 중 / 반영됨 / 실패 / 꺼짐
+	var pubKey = false;
+	function pubStatus() {
+		return fetch("common/publish.jsp?status=1", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (j) {
+			pubKey = j.key;
+			var s = j.status || {}, t = !j.key ? "GitHub 자동 반영 꺼짐"
+				: s.state === "waiting" ? "GitHub 반영 대기 중…" : s.state === "running" ? "GitHub에 올리는 중…"
+				: s.state === "error" ? "GitHub 반영 실패 (" + s.at.slice(11) + ")" : s.state === "ok" ? "GitHub 반영됨 " + s.at.slice(11) : "GitHub 자동 반영 켜짐";
+			$("pubSt").textContent = t;
+			$("pubSt").style.color = s.state === "error" ? "#fca5a5" : "";
+			$("pubState").innerHTML = j.key ? "자동 반영 <b>켜짐</b>" + (s.at ? " · 마지막 " + esc(s.at) + " " + esc(s.state === "ok" ? "반영됨 → " + s.msg : s.msg) : "") : "자동 반영 <b>꺼짐</b> (비밀번호를 정하면 켜집니다)";
+			$("pubOn").style.display = j.key ? "flex" : "none";
+			$("pubPwLabel").textContent = j.key ? "비밀번호 바꾸기 (바꾸면 밖에서도 새 비밀번호로 열어야 합니다)" : "";
+			$("pubGo").textContent = j.key ? "비밀번호 바꾸고 올리기" : "비밀번호 정하고 올리기";
+		}).catch(function () {});
+	}
+	function pubMsg(t, c) { $("pubMsg").textContent = t; $("pubMsg").className = c || ""; }
+	function pubPost(body, btn) {
+		pubMsg("암호화하고 올리는 중… (1분 정도 걸릴 수 있습니다)");
+		btn.disabled = true;
+		return fetch("common/publish.jsp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body })
+			.then(function (r) { return r.json(); })
+			.then(function (j) {
+				$("pubLog").style.display = j.log ? "block" : "none";
+				$("pubLog").textContent = j.log || "";
+				if (!j.ok) throw new Error(j.error || "실패");
+				pubMsg(j.url ? "올렸습니다. 1~2분 뒤 " + j.url + " 에 반영됩니다." : "완료했습니다.", "ok");
+				$("pw1").value = $("pw2").value = "";
+			})
+			.catch(function (e) { pubMsg("실패: " + e.message, "err"); })
+			.then(function () { btn.disabled = false; pubStatus(); });
+	}
+	$("pubClose").onclick = function () { $("pub").classList.remove("open"); $("pw1").value = $("pw2").value = ""; pubMsg(""); };
+	$("pubNow").onclick = function () { pubPost("now=1", this); };
+	$("pubOff").onclick = function () {
+		if (!confirm("자동 반영을 끌까요? (이미 올라간 사이트는 그대로 남습니다. 다시 켜려면 비밀번호를 새로 정해야 합니다)")) return;
+		pubPost("off=1", this);
+	};
+	$("pubGo").onclick = function () {
+		var p = $("pw1").value;
+		if (p.length < 4) { pubMsg("비밀번호는 4자 이상으로 해 주세요.", "err"); return; }
+		if (p !== $("pw2").value) { pubMsg("비밀번호 확인이 다릅니다.", "err"); return; }
+		pubPost("pw=" + encodeURIComponent(p), this);
+	};
+
+	route();
+</script>
+</body>
+</html>

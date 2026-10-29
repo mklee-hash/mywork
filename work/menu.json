@@ -1,0 +1,6 @@
+[
+  { "id": "all", "title": "전체", "desc": "모든 작업" },
+  { "id": "dev", "title": "시스템개발", "desc": "시스템 개발 작업" },
+  { "id": "ai", "title": "AI작업", "desc": "AI 관련 작업" },
+  { "id": "support", "title": "고객지원", "desc": "고객 지원 작업" }
+]

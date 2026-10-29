@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../common/static.js" data-root="../"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업내역</title>
+<link rel="stylesheet" href="../common/server.css">
+<link rel="stylesheet" href="../common/records.css">
+<style>
+	.badge.s-진행중 { background: #dbeafe; color: #1e40af; }
+	.badge.s-대기 { background: #fef3c7; color: #92400e; }
+	.badge.s-완료 { background: #dcfce7; color: #166534; }
+	table.list td.k-title { font-weight: 600; }
+	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
+	table.list td.k-act { width: 40px; text-align: right; }
+	.filters .btn.on { font-weight: bold; }
+</style>
+</head>
+<body>
+<div id="bar">
+	<h2 id="title">작업내역</h2>
+	<input class="inp" id="q" placeholder="제목 검색" style="width:240px">
+	<span class="grp filters" id="filters"></span>
+	<span class="spacer"></span>
+	<button class="btn primary" id="bNew" title="새 작업 문서 만들기">＋ 새 작업</button>
+</div>
+<div id="content"></div>
+<div id="status">
+	<span id="sInfo"></span>
+	<span class="spacer"></span>
+	<span id="msg"></span>
+</div>
+
+<script>
+	var EXT = window.MK_EXT || ".jsp";
+	var API = "../common/data.jsp?space=work";
+	var STATUS = ["진행중", "대기", "완료"];
+	var CAT = (new URLSearchParams(location.search).get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
+	var CATS = [];   // work/menu.json (all 빼고)
+	var list = [], term = "", filter = "";
+	function catTitle(id) { var c = CATS.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+	function docUrl(id) { return "../common/doc" + EXT + "?space=work&doc=" + encodeURIComponent(id) + "&cat=" + CAT; }
+
+	function render() {
+		var all = CAT === "all";
+		var mine = list.filter(function (w) { return all || w.category === CAT; });
+		$("title").textContent = "작업내역 · " + (all ? "전체" : catTitle(CAT));
+		$("filters").innerHTML = [""].concat(STATUS).map(function (s) {
+			var n = mine.filter(function (w) { return !s || w.status === s; }).length;
+			return '<button class="btn' + (filter === s ? " on" : "") + '" data-f="' + esc(s) + '">' + (s || "전체") + " " + n + "</button>";
+		}).join("");
+		var rows = mine.filter(function (w) {
+			return (!filter || w.status === filter) && (!term || String(w.title).toLowerCase().indexOf(term.toLowerCase()) >= 0);
+		});
+		var h = ['<section class="card"><header><h3>작업 목록</h3><span class="cnt">' + rows.length + "</span></header>"];
+		if (!rows.length) h.push('<div class="empty">' + (mine.length ? "조건에 맞는 작업이 없습니다." : "아직 작업이 없습니다." + (window.MK_STATIC ? "" : " [＋ 새 작업]으로 만드세요.")) + "</div>");
+		else {
+			h.push('<table class="list"><thead><tr><th>제목</th>' + (all ? "<th>카테고리</th>" : "") + '<th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
+			rows.forEach(function (w) {
+				h.push('<tr class="row" data-id="' + esc(w.id) + '"><td class="k-title">' + esc(w.title || "제목 없음") + "</td>"
+					+ (all ? '<td><span class="badge">' + esc(catTitle(w.category)) + "</span></td>" : "")
+					+ '<td><span class="badge s-' + esc(w.status) + '">' + esc(w.status || "-") + "</span></td>"
+					+ '<td class="k-date">' + esc(w.createdAt || "-") + '</td><td class="k-date">' + esc(w.savedAt || "-") + "</td>"
+					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(w.id) + '" title="삭제">✕</button></td></tr>');
+			});
+			h.push("</tbody></table>");
+		}
+		$("content").innerHTML = h.join("") + "</section>";
+		$("sInfo").textContent = (all ? "" : catTitle(CAT) + " " + mine.length + "건 · ") + "전체 " + list.length + "건";
+	}
+
+	function load() {
+		return Promise.all([
+			fetch(API + "&list=1", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
+			fetch("menu.json", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; })
+		]).then(function (x) {
+			CATS = x[1].filter(function (c) { return c.id !== "all"; });
+			var j = x[0];
+			// 최근 저장 순
+			list = j.sort(function (a, b) { return String(b.savedAt || b.createdAt).localeCompare(String(a.savedAt || a.createdAt)); });
+			render();
+		}).catch(function (e) { msg("목록을 불러오지 못했습니다: " + e.message, "err"); });
+	}
+
+	$("q").addEventListener("input", function () { term = this.value.trim(); render(); });
+	document.addEventListener("click", function (e) {
+		var b = e.target.closest("[data-f]");
+		if (b) { filter = b.getAttribute("data-f"); render(); return; }
+		b = e.target.closest("[data-del]");
+		if (b) {
+			e.stopPropagation();
+			var w = list.filter(function (x) { return x.id === b.getAttribute("data-del"); })[0];
+			if (!w || !confirm("'" + (w.title || "제목 없음") + "' 작업을 삭제할까요?\n(WEB-INF/data/work/_backup 에 남습니다)")) return;
+			fetch(API + "&doc=" + encodeURIComponent(w.id) + "&delete=1", { method: "POST" }).then(function (r) {
+				if (!r.ok) throw new Error(r.status);
+				msg("삭제했습니다.", "ok");
+				load();
+			}).catch(function (e) { msg("삭제 실패: " + e.message, "err"); });
+			return;
+		}
+		var tr = e.target.closest("tr.row");
+		if (tr) location.href = docUrl(tr.getAttribute("data-id"));
+	});
+
+	$("bNew").onclick = function () {
+		var t = prompt("새 작업 제목" + (CAT === "all" ? " (카테고리는 문서에서 고를 수 있습니다)" : " - " + catTitle(CAT)), "");
+		if (t === null) return;
+		t = t.trim() || "제목 없음";
+		var id = "w" + Date.now().toString(36), at = now();
+		var body = { type: "doc", title: t, category: CAT === "all" ? "" : CAT, status: "진행중", createdAt: at, savedAt: at, html: "<h1>" + esc(t) + "</h1><p><br></p>" };
+		fetch(API + "&doc=" + id + "&ver=", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body) })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); location.href = docUrl(id); })
+			.catch(function (e) { msg("만들기 실패: " + e.message, "err"); });
+	};
+
+	load();
+</script>
+</body>
+</html>

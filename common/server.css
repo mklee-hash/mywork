@@ -1,0 +1,55 @@
+/* mkwork 공통 스타일 (서버관리 · 작업내역) */
+:root {
+	--line: #e2e8f0; --line2: #cbd5e1; --muted: #64748b; --accent: #0d9488; --accent-bg: #f0fdfa;
+	--sel: #ccfbf1; --hit: #fde68a; --warn-bg: #fffbeb;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; display: flex; flex-direction: column; font-family: "맑은 고딕", "Malgun Gothic", sans-serif; font-size: 13px; color: #0f172a; background: #fff; }
+
+/* 상단 바 */
+#bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 12px; border-bottom: 1px solid var(--line); background: #f8fafc; }
+#bar h2 { margin: 0 6px 0 0; font-size: 16px; white-space: nowrap; }
+#bar .sep { width: 1px; height: 22px; background: var(--line2); }
+#bar .grp { display: inline-flex; align-items: center; gap: 4px; }
+.btn { height: 28px; padding: 0 10px; border: 1px solid var(--line2); border-radius: 5px; background: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; color: inherit; font-family: inherit; }
+.btn:hover { background: #f1f5f9; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.on { background: var(--accent-bg); border-color: var(--accent); color: #0f766e; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: #0f766e; }
+.btn.icon { width: 28px; padding: 0; font-weight: bold; }
+.btn.dirty::after { content: " ●"; color: #f59e0b; }
+.chk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+.inp { height: 28px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 5px; font-size: 13px; font-family: inherit; }
+.muted { color: var(--muted); }
+.spacer { flex: 1; }
+
+/* 색 고르기 */
+.pal { position: relative; display: inline-block; }
+.pal .pop { display: none; position: absolute; top: 31px; left: 0; z-index: 50; padding: 6px; background: #fff; border: 1px solid var(--line2); border-radius: 6px; box-shadow: 0 6px 18px rgba(15, 23, 42, .15); width: 172px; }
+.pal.open .pop { display: grid; grid-template-columns: repeat(8, 18px); gap: 3px; }
+.pal .pop span { width: 18px; height: 18px; border: 1px solid rgba(0, 0, 0, .15); border-radius: 3px; cursor: pointer; }
+.pal .pop span.none { grid-column: span 8; width: auto; height: auto; padding: 2px 4px; font-size: 12px; text-align: center; background: #f8fafc; }
+.pal .sw { display: inline-block; width: 12px; height: 4px; vertical-align: bottom; margin-left: 2px; }
+
+/* 상태 줄 */
+#status { flex: none; display: flex; gap: 14px; padding: 4px 12px; border-top: 1px solid var(--line); background: #f8fafc; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+#status b { color: #0f172a; font-weight: normal; }
+#msg.err { color: #b91c1c; }
+#msg.ok { color: #0f766e; }
+
+/* 메뉴 (오른쪽 클릭) */
+#ctx { position: fixed; z-index: 100; display: none; min-width: 160px; padding: 4px 0; background: #fff; border: 1px solid var(--line2); border-radius: 6px; box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
+#ctx div { padding: 6px 14px; cursor: pointer; white-space: nowrap; }
+#ctx div:hover { background: #f1f5f9; }
+#ctx hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+
+/* 이력 서랍 */
+#drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 360px; max-width: 100%; z-index: 90; background: #fff; border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(15, 23, 42, .12); transform: translateX(100%); transition: transform .2s; overflow-y: auto; padding: 16px 18px; }
+#drawer.open { transform: none; }
+#drawer h3 { margin: 0 0 4px; font-size: 15px; }
+#drawer .x { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--muted); }
+#drawer table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+#drawer td { padding: 5px 4px; border-bottom: 1px solid var(--line); }
+#drawer .note { margin: 8px 0; padding: 6px 10px; border-left: 3px solid #f59e0b; background: var(--warn-bg); line-height: 1.6; }
