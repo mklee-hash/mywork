@@ -1,6 +1,6 @@
 /* GitHub 보기 사이트 전용 (common/publish.jsp 가 각 HTML 의 <head> 맨 앞에 넣음)
  *   - data.jsp 요청을 암호화된 파일 d/<이름>.bin 읽기로 바꿈 (AES-GCM, 키 = PBKDF2-SHA256(비밀번호))
- *   - 파일 이름 = SHA-256(salt + "|" + 요청 키) 앞 32자리, 요청 키 = "space=..&doc=..[&img=..|&list=1]"
+ *   - 파일 이름 = SHA-256(salt + "|" + 요청 키) 앞 32자리, 요청 키 = "space=..&doc=..[&img=..]" 또는 "space=work&list=1|cats=1"
  *   - 수정/저장 버튼은 숨김 (보기 전용)
  *   - 비밀번호는 저장하지 않고, 풀린 키만 이 브라우저(sessionStorage, [기억] 시 localStorage)에 둠
  */
@@ -67,6 +67,7 @@
 		var u = new URL(url, location.href), q = u.searchParams;
 		var k = "space=" + (q.get("space") || "server");
 		if (q.get("list") != null) return k + "&list=1";
+		if (q.get("cats") != null) return k + "&cats=1";
 		k += "&doc=" + (q.get("doc") || "");
 		if (q.get("img") != null) k += "&img=" + q.get("img");
 		return k;

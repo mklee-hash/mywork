@@ -17,6 +17,16 @@
 	#toc .l2 { padding-left: 30px; color: #334155; }
 	#toc .l3 { padding-left: 46px; color: var(--muted); font-size: 12px; }
 	#toc .n { color: var(--accent); margin-right: 4px; }
+	#toc .wh { padding: 2px 14px 8px; font-weight: bold; color: #0f172a; cursor: default; }
+	#toc .wh:hover { background: none; }
+	#toc .wi { padding: 7px 14px; border-left: 3px solid transparent; }
+	#toc .wi.on { background: #fff; border-left-color: var(--accent); font-weight: bold; color: #0f766e; cursor: default; }
+	#toc .wi .st { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #cbd5e1; vertical-align: middle; }
+	#toc .wi .st.s-진행중 { background: #3b82f6; }
+	#toc .wi .st.s-대기 { background: #f59e0b; }
+	#toc .wi .st.s-완료 { background: #22c55e; }
+	#tocH { margin: 2px 0 6px; padding-left: 10px; border-left: 3px solid var(--accent); background: #fff; font-size: 12px; }
+	#tocH div { padding: 3px 14px; }
 	#paper { flex: 1; min-width: 0; overflow-y: auto; background: #e2e8f0; padding: 20px; }
 	#ed { max-width: 860px; min-height: 100%; margin: 0 auto; padding: 40px 56px 80px; background: #fff; box-shadow: 0 1px 4px rgba(15, 23, 42, .15); outline: none; }
 	#ed img.on { outline: 3px solid var(--accent); }
@@ -133,28 +143,55 @@
 	$("bBack").onclick = function () {
 		location.href = "../work/index" + (window.MK_EXT || ".jsp") + "?cat=" + encodeURIComponent((QS.get("cat") || "all").replace(/[^a-z0-9_-]/g, ""));
 	};
-	// 카테고리 목록: work/menu.json (all 빼고)
-	var catsP = WORK ? fetch("../work/menu.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (cs) {
-		cs.forEach(function (c) { if (c.id !== "all") $("tCat").insertAdjacentHTML("beforeend", '<option value="' + esc(c.id) + '">' + esc(c.title) + "</option>"); });
+	// 카테고리 목록 (작업내역 [카테고리 관리]에서 고침)
+	var CATS = [];
+	var catsP = WORK ? fetch("data.jsp?space=work&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (cs) {
+		CATS = cs;
+		cs.forEach(function (c) { $("tCat").insertAdjacentHTML("beforeend", '<option value="' + esc(c.id) + '">' + esc(c.title) + "</option>"); });
 	}).catch(function () {}) : Promise.resolve();
 	$("tCat").addEventListener("change", markDirty);
 	$("tTitle").addEventListener("input", markDirty);
 	$("tStatus").addEventListener("change", markDirty);
 
-	// ---------------------------------------------------------------- 목차
+	// ---------------------------------------------------------------- 왼쪽: 작업 목록(작업내역) + 목차
+	// 작업내역이면 같은 카테고리 작업 목록을 보여 주고, 지금 작업 아래에 이 문서의 목차를 붙임
+	var CAT = (QS.get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
+	function catTitle(id) { var c = CATS.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
+	function drawWorkList() {
+		return Promise.all([fetch("data.jsp?space=work&list=1", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : []; }), catsP]).then(function (x) {
+			var ws = x[0].filter(function (w) { return CAT === "all" || w.category === CAT || w.id === DOC; })
+				.sort(function (a, b) { return String(b.savedAt || b.createdAt).localeCompare(String(a.savedAt || a.createdAt)); });
+			$("toc").innerHTML = '<div class="wh">' + esc(CAT === "all" ? "전체 작업" : catTitle(CAT)) + ' <span class="muted">' + ws.length + "</span></div>"
+				+ ws.map(function (w) {
+					return '<div class="wi' + (w.id === DOC ? " on" : "") + '" data-w="' + esc(w.id) + '" title="' + esc(w.title) + '">'
+						+ '<span class="st s-' + esc(w.status) + '"></span>' + esc(w.title || "제목 없음") + "</div>"
+						+ (w.id === DOC ? '<div id="tocH"></div>' : "");
+				}).join("");
+			updateToc();
+		});
+	}
 	var tocTimer = null;
 	function updateToc() {
 		clearTimeout(tocTimer);
 		tocTimer = setTimeout(function () {
+			var box = WORK ? $("tocH") : $("toc");
+			if (!box) return;
+			// 번호는 문서(doc.css)와 같게 세고, 내용 없는 제목은 목차에서 뺌
 			var n1 = 0, n2 = 0, hs = ed.querySelectorAll("h1, h2, h3");
-			$("toc").innerHTML = Array.prototype.map.call(hs, function (h, i) {
-				var lv = +h.tagName.charAt(1), num = "";
+			box.innerHTML = Array.prototype.map.call(hs, function (h, i) {
+				var lv = +h.tagName.charAt(1), num = "", t = h.textContent.trim();
 				if (lv === 1) { n1++; n2 = 0; num = n1 + "."; } else if (lv === 2) { n2++; num = n1 + "." + n2; }
-				return '<div class="l' + lv + '" data-i="' + i + '" title="' + esc(h.textContent) + '"><span class="n">' + num + "</span>" + esc(h.textContent) + "</div>";
-			}).join("") || '<div class="muted">제목이 없습니다</div>';
+				if (!t) return "";
+				return '<div class="l' + lv + '" data-i="' + i + '" title="' + esc(t) + '"><span class="n">' + num + "</span>" + esc(t) + "</div>";
+			}).join("") || (WORK ? "" : '<div class="muted">제목이 없습니다</div>');
 		}, 200);
 	}
 	$("toc").addEventListener("click", function (e) {
+		var w = e.target.closest("[data-w]");
+		if (w) {
+			if (w.getAttribute("data-w") !== DOC) location.href = "doc" + (window.MK_EXT || ".jsp") + "?space=work&doc=" + encodeURIComponent(w.getAttribute("data-w")) + "&cat=" + CAT;
+			return;
+		}
 		var d = e.target.closest("[data-i]");
 		if (!d) return;
 		var h = ed.querySelectorAll("h1, h2, h3")[+d.getAttribute("data-i")];
@@ -363,7 +400,7 @@
 			if (x.s !== 200) throw new Error(x.j.error || x.s);
 			ver = x.j.ver;
 			data.savedAt = x.j.savedAt;
-			if (WORK) { data.title = body.title; data.category = body.category; data.status = body.status; data.createdAt = body.createdAt; document.title = body.title + " - 작업"; }
+			if (WORK) { data.title = body.title; data.category = body.category; data.status = body.status; data.createdAt = body.createdAt; document.title = body.title + " - 작업"; drawWorkList(); }
 			dirty = false;
 			$("bSave").classList.remove("dirty");
 			render();
@@ -450,7 +487,7 @@
 		ed.innerHTML = data.html || "<p><br></p>";
 		document.execCommand("defaultParagraphSeparator", false, "p");
 		render();
-		updateToc();
+		if (WORK) drawWorkList(); else updateToc();
 	}).catch(function (e) {
 		$("title").textContent = "불러오기 실패";
 		msg(e.message, "err");

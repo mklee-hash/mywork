@@ -15,6 +15,16 @@
 	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
 	table.list td.k-act { width: 40px; text-align: right; }
 	.filters .btn.on { font-weight: bold; }
+	#cats { position: fixed; inset: 0; z-index: 90; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; background: rgba(15, 23, 42, .35); }
+	#cats.open { display: flex; }
+	#cats .box { width: 460px; max-width: calc(100% - 32px); padding: 18px 20px; background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(15, 23, 42, .3); }
+	#cats h3 { margin: 0 0 4px; font-size: 16px; }
+	#cats table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+	#cats td { padding: 3px 2px; }
+	#cats td.n { width: 70px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+	#cats td.a { width: 80px; white-space: nowrap; text-align: right; }
+	#cats .inp { width: 100%; }
+	#cats .row { display: flex; gap: 8px; align-items: center; }
 </style>
 </head>
 <body>
@@ -23,7 +33,16 @@
 	<input class="inp" id="q" placeholder="제목 검색" style="width:240px">
 	<span class="grp filters" id="filters"></span>
 	<span class="spacer"></span>
+	<button class="btn rw" id="bCats" title="왼쪽 카테고리 이름 바꾸기 · 추가 · 삭제 · 순서">카테고리 관리</button>
 	<button class="btn primary" id="bNew" title="새 작업 문서 만들기">＋ 새 작업</button>
+</div>
+<div id="cats">
+	<div class="box">
+		<h3>카테고리 관리</h3>
+		<div class="muted">이름을 고치거나 순서를 바꾸고 [저장]하세요. 카테고리를 지우면 그 안의 작업은 '미분류'가 됩니다(작업은 지워지지 않음).</div>
+		<table><tbody id="catRows"></tbody></table>
+		<div class="row"><button class="btn" id="catAdd">＋ 카테고리 추가</button><span class="spacer"></span><button class="btn" id="catClose">닫기</button><button class="btn primary" id="catSave">저장</button></div>
+	</div>
 </div>
 <div id="content"></div>
 <div id="status">
@@ -37,7 +56,7 @@
 	var API = "../common/data.jsp?space=work";
 	var STATUS = ["진행중", "대기", "완료"];
 	var CAT = (new URLSearchParams(location.search).get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
-	var CATS = [];   // work/menu.json (all 빼고)
+	var CATS = [];   // [{id,title}] 왼쪽 메뉴 순서
 	var list = [], term = "", filter = "";
 	function catTitle(id) { var c = CATS.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
 
@@ -78,9 +97,9 @@
 	function load() {
 		return Promise.all([
 			fetch(API + "&list=1", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
-			fetch("menu.json", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; })
+			fetch(API + "&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; })
 		]).then(function (x) {
-			CATS = x[1].filter(function (c) { return c.id !== "all"; });
+			CATS = x[1];
 			var j = x[0];
 			// 최근 저장 순
 			list = j.sort(function (a, b) { return String(b.savedAt || b.createdAt).localeCompare(String(a.savedAt || a.createdAt)); });
@@ -117,6 +136,52 @@
 		fetch(API + "&doc=" + id + "&ver=", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body) })
 			.then(function (r) { if (!r.ok) throw new Error(r.status); location.href = docUrl(id); })
 			.catch(function (e) { msg("만들기 실패: " + e.message, "err"); });
+	};
+
+	// ---------------------------------------------------------------- 카테고리 관리
+	function catRow(c) {
+		var n = list.filter(function (w) { return w.category === c.id; }).length;
+		return '<tr data-id="' + esc(c.id) + '"><td><input class="inp" value="' + esc(c.title) + '" placeholder="카테고리 이름"></td>'
+			+ '<td class="n">' + (c.id ? "작업 " + n + "개" : "새 카테고리") + '</td><td class="a"><button class="ib" data-mv="-1" title="위로">▲</button>'
+			+ '<button class="ib" data-mv="1" title="아래로">▼</button><button class="ib" data-cdel="' + n + '" title="삭제">✕</button></td></tr>';
+	}
+	$("bCats").onclick = function () {
+		$("catRows").innerHTML = CATS.map(catRow).join("");
+		$("cats").classList.add("open");
+	};
+	$("catClose").onclick = function () { $("cats").classList.remove("open"); };
+	$("catAdd").onclick = function () {
+		$("catRows").insertAdjacentHTML("beforeend", catRow({ id: "", title: "" }));
+		$("catRows").lastElementChild.querySelector("input").focus();
+	};
+	$("catRows").addEventListener("click", function (e) {
+		var t = e.target, tr = t.closest("tr");
+		if (!tr) return;
+		if (t.hasAttribute("data-mv")) {
+			if (+t.getAttribute("data-mv") < 0 && tr.previousElementSibling) tr.parentNode.insertBefore(tr, tr.previousElementSibling);
+			else if (+t.getAttribute("data-mv") > 0 && tr.nextElementSibling) tr.parentNode.insertBefore(tr.nextElementSibling, tr);
+		} else if (t.hasAttribute("data-cdel")) {
+			var n = +t.getAttribute("data-cdel");
+			if (n && !confirm("이 카테고리의 작업 " + n + "개가 '미분류'가 됩니다. 지울까요?")) return;
+			tr.remove();
+		}
+	});
+	$("catSave").onclick = function () {
+		var cats = Array.prototype.map.call($("catRows").rows, function (tr, i) {
+			var title = tr.querySelector("input").value.trim();
+			return { id: tr.getAttribute("data-id") || "c" + (Date.now() + i).toString(36), title: title };
+		}).filter(function (c) { return c.title; });
+		fetch(API + "&cats=1", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(cats) })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); })
+			.then(function () {
+				CATS = cats;
+				$("cats").classList.remove("open");
+				render();
+				msg("카테고리를 저장했습니다.", "ok");
+				// 왼쪽 메뉴 다시 그리기 (지금 카테고리를 지웠으면 전체로 감)
+				if (window.parent !== window && parent.MK_REFRESH) parent.MK_REFRESH();
+			})
+			.catch(function (e) { msg("카테고리 저장 실패: " + e.message, "err"); });
 	};
 
 	load();

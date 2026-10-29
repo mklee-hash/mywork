@@ -80,19 +80,13 @@
 </div>
 
 <script type="application/json" id="rootMenu">[
-  {"id": "work", "title": "작업내역", "local": true, "menu": "work/menu.json"},
+  {"id": "work", "title": "작업내역", "local": true, "categories": true},
   {"id": "server", "title": "서버관리", "local": true, "menu": "server/menu.json"},
   {"id": "skill", "title": "스킬", "items": [{"id": "home", "title": "스킬", "path": "common/soon", "query": "m=skill"}]},
   {"id": "test", "title": "테스트", "menu": "test/menu.json", "pcOnly": true}
 ]
 </script>
-<script type="application/json" id="subMenus">{"work/menu.json":[
-  { "id": "all", "title": "전체", "desc": "모든 작업" },
-  { "id": "dev", "title": "시스템개발", "desc": "시스템 개발 작업" },
-  { "id": "ai", "title": "AI작업", "desc": "AI 관련 작업" },
-  { "id": "support", "title": "고객지원", "desc": "고객 지원 작업" }
-]
-,"server/menu.json":[
+<script type="application/json" id="subMenus">{"server/menu.json":[
   {
     "id": "mail",
     "title": "공용메일",
@@ -151,7 +145,6 @@
 		root.forEach(function (t) {
 			if (t.local && !LOCAL) return;
 			var items = t.items || (subs[t.menu] || []).map(function (s) {
-				if (t.id === "work") return { id: s.id, title: s.title, desc: s.desc, path: "work/index", query: "cat=" + encodeURIComponent(s.id) };
 				if (t.id === "server") return { id: s.id, title: s.title, desc: s.desc, path: s.type === "doc" ? "common/doc" : "server/records", query: (s.type === "doc" ? "space=server&" : "") + "doc=" + encodeURIComponent(s.id) };
 				return { id: s.id, title: s.title, desc: s.desc, path: t.menu.replace(/[^\/]+$/, "") + s.path };
 			});
@@ -161,9 +154,20 @@
 				else u = (/\.jsp$/.test(s.path) ? s.path : s.path + EXT) + (s.query ? "?" + s.query : "");
 				return { id: s.id, title: s.title, desc: s.desc || "", url: u };
 			});
-			tabs.push({ id: t.id, title: t.title, items: items, pcOnly: t.pcOnly });
+			tabs.push({ id: t.id, title: t.title, items: items, pcOnly: t.pcOnly, categories: t.categories });
 		});
 	})();
+
+	// 작업내역 하위 메뉴 = 전체 + 카테고리 (데이터에 있어서 작업내역 화면에서 고침). 고친 뒤 작업 목록이 MK_REFRESH() 를 부름
+	function catItem(id, title) { return { id: id, title: title, desc: "", url: "work/index" + EXT + "?cat=" + encodeURIComponent(id) }; }
+	window.MK_REFRESH = function () {
+		var t = tabs.filter(function (x) { return x.categories; })[0];
+		if (!t) return Promise.resolve();
+		t.items = [catItem("all", "전체")];
+		return fetch("common/data.jsp?space=work&cats=1", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : []; }).then(function (cs) {
+			cs.forEach(function (c) { t.items.push(catItem(c.id, c.title)); });
+		}).catch(function () {}).then(route);
+	};
 
 	function route() {
 		var h = decodeURIComponent(location.hash.slice(1)).split("/");
@@ -244,7 +248,7 @@
 		pubPost("pw=" + encodeURIComponent(p), this);
 	};
 
-	route();
+	MK_REFRESH();
 </script>
 </body>
 </html>
