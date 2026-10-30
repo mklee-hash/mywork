@@ -16,11 +16,11 @@
 	.card li a { display: block; padding: 6px 12px; color: #0f172a; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.card li a:hover { background: #f0fdfa; color: #0f766e; }
 	.card li a .dm { margin-left: 6px; color: #94a3b8; font-size: 11px; }
-	/* 계정·암호가 있는 링크: 오른쪽 🔑, 누르면 풍선 */
+	/* 계정·암호가 있는 링크: 오른쪽 'ID/PW' 표시, 누르면 풍선 */
 	.card li { position: relative; display: flex; align-items: center; }
 	.card li a { flex: 1; min-width: 0; }
-	.card li .key { margin-right: 6px; opacity: .55; }
-	.card li .key:hover { opacity: 1; }
+	.card li .key { flex: none; margin-right: 8px; padding: 1px 6px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #475569; font: inherit; font-size: 10.5px; line-height: 15px; cursor: pointer; }
+	.card li .key:hover { border-color: var(--accent); color: #0f766e; background: #f0fdfa; }
 	#cred { position: fixed; z-index: 95; display: none; width: 300px; padding: 10px 12px; background: #fff; border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, .2); font-size: 13px; }
 	#cred.open { display: block; }
 	#cred .t { margin-bottom: 6px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -40,7 +40,8 @@
 	.edit .lk .ls input.a { flex: 2; }
 	.edit .lk .ls input.p { flex: 2; font-family: Consolas, monospace; }
 	.edit .lk .ls input.m { flex: 3; }
-	.ib.on { color: #b45309; }
+	.edit .lk .cb { flex: none; height: 26px; padding: 0 8px; font-size: 12px; }
+	.edit .lk .cb.on { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
 	.edit .lk.drag { opacity: .4; }
 	.edit .lk.over { box-shadow: inset 0 2px 0 var(--accent); }
 	.edit .lk .h { cursor: grab; color: #94a3b8; user-select: none; padding: 0 2px; }
@@ -125,7 +126,7 @@
 			return '<section class="card"><header>' + hl(g.title) + '<span class="cnt">' + ls.length + "</span></header><ul>"
 				+ ls.map(function (l) {
 					return '<li><a href="' + esc(l.url) + '" target="_blank" rel="noopener" title="' + esc(l.url) + '">' + hl(l.title || l.url) + '<span class="dm">' + esc(host(l.url)) + "</span></a>"
-						+ (hasCred(l) ? '<button class="ib key" data-cred="' + esc(l.id) + '" title="계정 · 암호 보기">🔑</button>' : "") + "</li>";
+						+ (hasCred(l) ? '<button class="key" data-cred="' + esc(l.id) + '" title="계정 · 암호 보기">ID/PW</button>' : "") + "</li>";
 				}).join("") + "</ul></section>";
 		}).join("");
 		$("cards").innerHTML = h || '<div class="empty">' + (data.groups.length ? "찾는 링크가 없습니다." : "링크가 없습니다." + (window.MK_STATIC ? "" : " [크롬 즐겨찾기 가져오기] 또는 [편집]으로 넣으세요.")) + "</div>";
@@ -134,7 +135,7 @@
 	}
 	$("q").addEventListener("input", function () { term = this.value.trim(); render(); });
 
-	// ---------------------------------------------------------------- 계정 · 암호 (🔑)
+	// ---------------------------------------------------------------- 계정 · 암호 (ID/PW)
 	function hasCred(l) { return !!(l.user || l.pw || l.note); }
 	function copyText(v) {
 		function done() { msg("복사했습니다.", "ok"); }
@@ -192,7 +193,7 @@
 				+ g.links.map(function (l, li) {
 					return '<div class="lk' + (hasCred(l) ? " open" : "") + '" draggable="true" data-l="' + li + '"><div class="lm"><span class="h" title="끌어서 옮기기">⋮⋮</span>'
 						+ '<input class="inp t" data-lt value="' + esc(l.title) + '" placeholder="이름"><input class="inp u" data-lu value="' + esc(l.url) + '" placeholder="https://">'
-						+ '<button class="ib' + (hasCred(l) ? " on" : "") + '" data-lkey title="계정 · 암호 · 메모">🔑</button><button class="ib" data-ldel title="링크 삭제">✕</button></div>'
+						+ '<button class="btn cb' + (hasCred(l) ? " on" : "") + '" data-lkey title="계정 · 암호 · 메모 칸 열기/닫기">계정·암호</button><button class="ib" data-ldel title="링크 삭제">✕</button></div>'
 						+ '<div class="ls"><input class="inp a" data-la value="' + esc(l.user) + '" placeholder="계정" autocomplete="off">'
 						+ '<input class="inp p" type="password" data-lp value="' + esc(l.pw) + '" placeholder="암호" autocomplete="new-password">'
 						+ '<button class="ib" data-lpeye title="암호 보기">👁</button><input class="inp m" data-lm value="' + esc(l.note) + '" placeholder="메모"></div></div>';
@@ -234,7 +235,7 @@
 	$("cards").addEventListener("click", function (e) {
 		var t = e.target, c = t.closest(".card[data-g]");
 		if (!editing || !c) return;
-		// 🔑: 계정·암호·메모 칸 열고 닫기, 👁: 암호 보이기 (다시 그리지 않음)
+		// [계정·암호]: 계정·암호·메모 칸 열고 닫기, 👁: 암호 보이기 (다시 그리지 않음)
 		if (t.hasAttribute("data-lkey")) {
 			var lk = t.closest(".lk");
 			lk.classList.toggle("open");
