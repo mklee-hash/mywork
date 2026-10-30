@@ -16,11 +16,31 @@
 	.card li a { display: block; padding: 6px 12px; color: #0f172a; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.card li a:hover { background: #f0fdfa; color: #0f766e; }
 	.card li a .dm { margin-left: 6px; color: #94a3b8; font-size: 11px; }
+	/* 계정·암호가 있는 링크: 오른쪽 🔑, 누르면 풍선 */
+	.card li { position: relative; display: flex; align-items: center; }
+	.card li a { flex: 1; min-width: 0; }
+	.card li .key { margin-right: 6px; opacity: .55; }
+	.card li .key:hover { opacity: 1; }
+	#cred { position: fixed; z-index: 95; display: none; width: 300px; padding: 10px 12px; background: #fff; border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, .2); font-size: 13px; }
+	#cred.open { display: block; }
+	#cred .t { margin-bottom: 6px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	#cred .r { display: flex; align-items: center; gap: 4px; padding: 3px 0; }
+	#cred .r .l { width: 34px; flex: none; color: var(--muted); font-size: 12px; }
+	#cred .r .v { flex: 1; min-width: 0; font-family: Consolas, monospace; word-break: break-all; }
+	#cred .note { margin-top: 4px; color: #475569; white-space: pre-wrap; }
 	mark { background: #fde68a; padding: 0; }
 	.empty { padding: 40px; text-align: center; color: var(--muted); }
-	/* 편집 */
+	/* 편집: 입력칸이 들어가게 카드를 넓게 */
+	.edit #cards { column-width: 430px; }
 	.edit .card > header input { flex: 1; font-weight: bold; }
-	.edit .lk { display: flex; gap: 4px; align-items: center; padding: 3px 8px; }
+	.edit .lk { padding: 3px 8px; }
+	.edit .lk .lm, .edit .lk .ls { display: flex; gap: 4px; align-items: center; }
+	.edit .lk .ls { display: none; padding: 4px 0 4px 20px; }
+	.edit .lk.open .ls { display: flex; }
+	.edit .lk .ls input.a { flex: 2; }
+	.edit .lk .ls input.p { flex: 2; font-family: Consolas, monospace; }
+	.edit .lk .ls input.m { flex: 3; }
+	.ib.on { color: #b45309; }
 	.edit .lk.drag { opacity: .4; }
 	.edit .lk.over { box-shadow: inset 0 2px 0 var(--accent); }
 	.edit .lk .h { cursor: grab; color: #94a3b8; user-select: none; padding: 0 2px; }
@@ -62,6 +82,7 @@
 	<span class="spacer"></span>
 	<span id="msg"></span>
 </div>
+<div id="cred"></div>
 <div id="imp">
 	<div class="box">
 		<h3>크롬 즐겨찾기 가져오기</h3>
@@ -103,7 +124,8 @@
 			shown += ls.length;
 			return '<section class="card"><header>' + hl(g.title) + '<span class="cnt">' + ls.length + "</span></header><ul>"
 				+ ls.map(function (l) {
-					return '<li><a href="' + esc(l.url) + '" target="_blank" rel="noopener" title="' + esc(l.url) + '">' + hl(l.title || l.url) + '<span class="dm">' + esc(host(l.url)) + "</span></a></li>";
+					return '<li><a href="' + esc(l.url) + '" target="_blank" rel="noopener" title="' + esc(l.url) + '">' + hl(l.title || l.url) + '<span class="dm">' + esc(host(l.url)) + "</span></a>"
+						+ (hasCred(l) ? '<button class="ib key" data-cred="' + esc(l.id) + '" title="계정 · 암호 보기">🔑</button>' : "") + "</li>";
 				}).join("") + "</ul></section>";
 		}).join("");
 		$("cards").innerHTML = h || '<div class="empty">' + (data.groups.length ? "찾는 링크가 없습니다." : "링크가 없습니다." + (window.MK_STATIC ? "" : " [크롬 즐겨찾기 가져오기] 또는 [편집]으로 넣으세요.")) + "</div>";
@@ -112,6 +134,55 @@
 	}
 	$("q").addEventListener("input", function () { term = this.value.trim(); render(); });
 
+	// ---------------------------------------------------------------- 계정 · 암호 (🔑)
+	function hasCred(l) { return !!(l.user || l.pw || l.note); }
+	function copyText(v) {
+		function done() { msg("복사했습니다.", "ok"); }
+		if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(v).then(done); return; }
+		var t = document.createElement("textarea");
+		t.value = v;
+		document.body.appendChild(t);
+		t.select();
+		document.execCommand("copy");
+		t.remove();
+		done();
+	}
+	var credLink = null;
+	function showCred(btn, l) {
+		credLink = l;
+		var row = function (label, v, secret) {
+			return '<div class="r"><span class="l">' + label + '</span><span class="v"' + (secret ? ' data-sec="1">••••••' : ">" + esc(v)) + "</span>"
+				+ (secret ? '<button class="ib" data-ceye title="보기/숨기기">👁</button>' : "")
+				+ '<button class="ib" data-ccopy="' + (secret ? "pw" : "user") + '" title="복사">⧉</button></div>';
+		};
+		$("cred").innerHTML = '<div class="t">' + esc(l.title) + "</div>" + (l.user ? row("계정", l.user) : "") + (l.pw ? row("암호", l.pw, true) : "")
+			+ (l.note ? '<div class="note">' + esc(l.note) + "</div>" : "");
+		var b = btn.getBoundingClientRect(), box = $("cred");
+		box.classList.add("open");
+		box.style.left = Math.max(8, Math.min(b.right - box.offsetWidth, innerWidth - box.offsetWidth - 8)) + "px";
+		box.style.top = (b.bottom + box.offsetHeight + 8 > innerHeight ? b.top - box.offsetHeight - 4 : b.bottom + 4) + "px";
+	}
+	function hideCred() { $("cred").classList.remove("open"); credLink = null; }
+	$("cred").addEventListener("click", function (e) {
+		var t = e.target;
+		if (!credLink) return;
+		if (t.hasAttribute("data-ceye")) {
+			var v = $("cred").querySelector("[data-sec]");
+			v.textContent = v.textContent === credLink.pw ? "••••••" : credLink.pw;
+		} else if (t.hasAttribute("data-ccopy")) copyText(t.getAttribute("data-ccopy") === "pw" ? credLink.pw : credLink.user);
+	});
+	document.addEventListener("mousedown", function (e) { if (!e.target.closest("#cred") && !e.target.closest("[data-cred]")) hideCred(); });
+	$("content").addEventListener("scroll", hideCred);
+	$("cards").addEventListener("click", function (e) {
+		var b = e.target.closest("[data-cred]");
+		if (!b || editing) return;
+		e.preventDefault();
+		var id = b.getAttribute("data-cred"), l = null;
+		data.groups.forEach(function (g) { g.links.forEach(function (x) { if (x.id === id) l = x; }); });
+		if (!l) return;
+		if (credLink === l) hideCred(); else showCred(b, l);
+	});
+
 	// ---------------------------------------------------------------- 편집
 	var draft = null;
 	function renderEdit() {
@@ -119,9 +190,12 @@
 			return '<section class="card" data-g="' + gi + '"><header><input class="inp" data-gt value="' + esc(g.title) + '" placeholder="카테고리 이름">'
 				+ '<button class="ib" data-gmv="-1" title="앞으로">▲</button><button class="ib" data-gmv="1" title="뒤로">▼</button><button class="ib" data-gdel title="카테고리 삭제">✕</button></header>'
 				+ g.links.map(function (l, li) {
-					return '<div class="lk" draggable="true" data-l="' + li + '"><span class="h" title="끌어서 옮기기">⋮⋮</span>'
+					return '<div class="lk' + (hasCred(l) ? " open" : "") + '" draggable="true" data-l="' + li + '"><div class="lm"><span class="h" title="끌어서 옮기기">⋮⋮</span>'
 						+ '<input class="inp t" data-lt value="' + esc(l.title) + '" placeholder="이름"><input class="inp u" data-lu value="' + esc(l.url) + '" placeholder="https://">'
-						+ '<button class="ib" data-ldel title="링크 삭제">✕</button></div>';
+						+ '<button class="ib' + (hasCred(l) ? " on" : "") + '" data-lkey title="계정 · 암호 · 메모">🔑</button><button class="ib" data-ldel title="링크 삭제">✕</button></div>'
+						+ '<div class="ls"><input class="inp a" data-la value="' + esc(l.user) + '" placeholder="계정" autocomplete="off">'
+						+ '<input class="inp p" type="password" data-lp value="' + esc(l.pw) + '" placeholder="암호" autocomplete="new-password">'
+						+ '<button class="ib" data-lpeye title="암호 보기">👁</button><input class="inp m" data-lm value="' + esc(l.note) + '" placeholder="메모"></div></div>';
 				}).join("")
 				+ '<button class="btn add" data-ladd>＋ 링크</button></section>';
 		}).join("") || '<div class="empty">[＋ 카테고리]로 시작하세요.</div>';
@@ -136,6 +210,11 @@
 				var l = g.links[+r.getAttribute("data-l")];
 				l.title = r.querySelector("[data-lt]").value.trim();
 				l.url = r.querySelector("[data-lu]").value.trim();
+				// 계정·암호·메모는 비면 지움 (암호 앞뒤 공백은 그대로 둠)
+				var u = r.querySelector("[data-la]").value.trim(), p = r.querySelector("[data-lp]").value, m = r.querySelector("[data-lm]").value.trim();
+				if (u) l.user = u; else delete l.user;
+				if (p) l.pw = p; else delete l.pw;
+				if (m) l.note = m; else delete l.note;
 			});
 		});
 	}
@@ -155,6 +234,18 @@
 	$("cards").addEventListener("click", function (e) {
 		var t = e.target, c = t.closest(".card[data-g]");
 		if (!editing || !c) return;
+		// 🔑: 계정·암호·메모 칸 열고 닫기, 👁: 암호 보이기 (다시 그리지 않음)
+		if (t.hasAttribute("data-lkey")) {
+			var lk = t.closest(".lk");
+			lk.classList.toggle("open");
+			if (lk.classList.contains("open")) lk.querySelector("[data-la]").focus();
+			return;
+		}
+		if (t.hasAttribute("data-lpeye")) {
+			var pi = t.closest(".lk").querySelector("[data-lp]");
+			pi.type = pi.type === "password" ? "text" : "password";
+			return;
+		}
 		collect();
 		var gi = +c.getAttribute("data-g"), g = draft.groups[gi];
 		if (t.hasAttribute("data-gmv")) {
