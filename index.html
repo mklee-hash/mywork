@@ -4,8 +4,9 @@
 <script src="common/static.js" data-root=""></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MY Work</title>
+<title>MY Work · 나의 작업</title>
 <link rel="icon" type="image/svg+xml" href="common/favicon.svg">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0f172a">
 <style>
 	:root { --top: #0f172a; --side: #1e293b; --side-fg: #cbd5e1; --accent: #14b8a6; }
 	* { box-sizing: border-box; }
@@ -97,7 +98,7 @@
 </div>
 
 <script type="application/json" id="rootMenu">[
-  {"id": "support", "title": "고객지원", "local": true, "pcOnly": true, "items": [{"id": "home", "title": "고객지원", "url": "http://127.0.0.1:17890/?u=mklee%40forcs.com&e=1793447105835&s=vjtkIfhXJ1nFalrrtkuecddKfcq-qdgeJVbP6k4U2SA"}]},
+  {"id": "support", "title": "고객지원", "local": true, "pcOnly": true, "items": [{"id": "home", "title": "고객지원", "url": "http://127.0.0.1:17890/?u=mklee%40forcs.com&e=1793450436737&s=NhjZkQULoKiw8cFSGU1bqdUymgma-912b6ufj0n1FCI"}]},
   {"id": "work", "title": "작업내역", "local": true, "categories": true},
   {"id": "server", "title": "서버관리", "local": true, "menu": "server/menu.json"},
   {"id": "skill", "title": "스킬", "items": [{"id": "home", "title": "스킬", "path": "common/soon", "query": "m=skill"}]},
@@ -218,7 +219,8 @@
 
 	function route() {
 		var h = decodeURIComponent(location.hash.slice(1)).split("/");
-		var t = tabs.filter(function (x) { return x.id === h[0]; })[0] || tabs[0];
+		// 처음 열 때: GitHub 보기 사이트는 링크, 내 PC 는 고객지원
+		var t = tabs.filter(function (x) { return x.id === h[0]; })[0] || tabs.filter(function (x) { return x.id === (STATIC ? "link" : "support"); })[0] || tabs[0];
 		if (!t) return;
 		var last = LAST[t.id] || {};
 		var it = t.items.filter(function (x) { return x.id === (h[1] || last.item); })[0] || t.items[0];
@@ -232,7 +234,7 @@
 		}).join("");
 		$("foot").innerHTML = t.pcOnly ? "OZ 서버가 필요한 화면이라<br>내 PC에서만 동작합니다." : STATIC ? "보기 전용입니다." : "저장할 때마다 이전 내용이<br>백업됩니다.";
 		// 브라우저 탭·창 제목: 내 PC(고치는 곳) = MY Work, GitHub(보기만) = MY Work 보기. 트레이 아이콘이 "MY Work" 로 이 창을 찾아 앞으로 가져옴
-		document.title = (STATIC ? "MY Work 보기" : "MY Work") + (it ? " · " + it.title : "");
+		document.title = (STATIC ? "MY Work 보기" : "MY Work") + " · " + (it ? it.title : "나의 작업");
 		if (!it) return;
 		Object.keys(frames).forEach(function (k) { frames[k].style.display = k === t.id ? "" : "none"; });
 		var f = frameFor(t);
@@ -284,9 +286,7 @@
 	}
 	if (!STATIC && USER) {
 		$("tbar").insertAdjacentHTML("beforeend", '<span title="Google 로그인">' + esc(USER) + '</span><button id="bOut">로그아웃</button>');
-		$("bOut").onclick = function () {
-			fetch("common/auth.jsp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "action=logout" }).then(function () { location.reload(); });
-		};
+		$("bOut").onclick = function () { location.href = "common/auth.jsp?action=logout"; };
 	}
 	// 반영 상태: 대기(저장 후 15초) / 올리는 중 / 반영됨 / 실패 / 꺼짐
 	var pubKey = false;
