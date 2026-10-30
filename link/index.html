@@ -34,6 +34,9 @@
 	.card li.drag { opacity: .4; }
 	.card li.over { box-shadow: inset 0 2px 0 var(--accent); }
 	.card.over { outline: 2px dashed var(--accent); outline-offset: -2px; }
+	/* 카테고리 제목 옆 ＋ (링크 추가) */
+	.card > header .gadd { margin-left: auto; color: #94a3b8; font-size: 14px; }
+	.card > header .gadd:hover { color: #0f766e; background: rgba(255, 255, 255, .7); }
 	/* 배경색이 있는 카드: 제목줄 = 고른 색(--c), 링크 목록 = 더 연한 색(--cl) */
 	.card[style] { background: var(--cl); }
 	.card[style] > header { background: var(--c); border-bottom-color: rgba(15, 23, 42, .1); border-radius: 10px 10px 0 0; }
@@ -181,7 +184,8 @@
 			var ls = g.links.filter(function (l) { return match(l, g); });
 			if (lc && !ls.length) return "";
 			shown += ls.length;
-			return '<section class="card" data-vg="' + gi + '"' + bgStyle(g) + '><header>' + hl(g.title) + '<span class="cnt">' + ls.length + "</span></header><ul>" + ls.map(li).join("") + "</ul></section>";
+			return '<section class="card" data-vg="' + gi + '"' + bgStyle(g) + '><header>' + hl(g.title) + '<span class="cnt">' + ls.length + "</span>"
+				+ '<button class="ib gadd rw" data-gadd="' + gi + '" title="이 카테고리에 링크 추가">＋</button></header><ul>' + ls.map(li).join("") + "</ul></section>";
 		}).join("");
 		$("cards").innerHTML = h || '<div class="empty">' + (data.groups.length ? "찾는 링크가 없습니다." : "링크가 없습니다." + (window.MK_STATIC ? "" : " [크롬 즐겨찾기 가져오기] 또는 [편집]으로 넣으세요.")) + "</div>";
 		$("qn").textContent = term ? shown + "개" : "";
@@ -209,9 +213,11 @@
 	}
 	// 링크 하나 보기 · 수정 창 (✎): 칸을 바로 고쳐 [저장]. 주소는 ↗ 로 열기, 계정·암호는 ⧉ 복사, 암호는 가리고 👁 로 보기
 	//   GitHub 보기 사이트에서는 칸이 읽기 전용이고 [저장]이 없음
-	var credLink = null;
-	function showCred(btn, l) {
+	//   카테고리 제목 옆 ＋ 는 같은 창을 빈 칸으로 열어 새 링크를 그 카테고리 맨 뒤에 추가 (credNewG = 카테고리 번호)
+	var credLink = null, credNewG = null;
+	function showCred(btn, l, newG) {
 		credLink = l;
+		credNewG = newG == null ? null : newG;
 		var box = $("cred"), ro = window.MK_STATIC ? " readonly" : "";
 		var f = function (label, k, extra) {
 			return '<label class="r"><span class="l">' + label + "</span>" + (k === "note"
@@ -220,7 +226,7 @@
 				+ (extra || "") + "</label>";
 		};
 		var cp = function (k) { return '<button type="button" class="ib" data-ccopy="' + k + '" title="복사">⧉</button>'; };
-		box.innerHTML = '<div class="t">' + esc(l.title || "링크") + "</div>"
+		box.innerHTML = '<div class="t">' + (credNewG != null ? "새 링크 · " + esc(data.groups[credNewG].title) : esc(l.title || "링크")) + "</div>"
 			+ f("이름", "title")
 			+ f("주소", "url", '<a class="ib" data-copen href="' + esc(l.url) + '" target="_blank" rel="noopener" title="새 탭으로 열기">↗</a>' + cp("url"))
 			+ f("계정", "user", cp("user"))
@@ -231,13 +237,15 @@
 		var b = btn.getBoundingClientRect();
 		box.style.left = Math.max(8, Math.min(b.right - box.offsetWidth, innerWidth - box.offsetWidth - 8)) + "px";
 		box.style.top = Math.max(8, b.bottom + box.offsetHeight + 8 > innerHeight ? b.top - box.offsetHeight - 4 : b.bottom + 4) + "px";
+		if (credNewG != null) box.querySelector('[data-f="title"]').focus();
 	}
-	function hideCred() { $("cred").classList.remove("open"); credLink = null; }
+	function hideCred() { $("cred").classList.remove("open"); credLink = null; credNewG = null; }
 	function saveCred() {
 		var id = credLink.id, next = JSON.parse(JSON.stringify(data)), vals = {};
 		$("cred").querySelectorAll("[data-f]").forEach(function (el) { vals[el.getAttribute("data-f")] = el.getAttribute("data-f") === "pw" ? el.value : el.value.trim(); });
 		if (!vals.url) { msg("주소를 넣어 주세요.", "err"); return; }
 		if (!/^[a-z][a-z0-9+.-]*:/i.test(vals.url)) vals.url = "https://" + vals.url;
+		if (credNewG != null) next.groups[credNewG].links.push({ id: id, title: "", url: "" });
 		next.groups.forEach(function (g) {
 			g.links.forEach(function (l) {
 				if (l.id !== id) return;
@@ -263,7 +271,7 @@
 		if (e.key === "Enter" && e.target.tagName === "INPUT" && !window.MK_STATIC) { e.preventDefault(); saveCred(); }
 		else if (e.key === "Escape") hideCred();
 	});
-	document.addEventListener("mousedown", function (e) { if (!e.target.closest("#cred") && !e.target.closest("[data-cred]")) hideCred(); });
+	document.addEventListener("mousedown", function (e) { if (!e.target.closest("#cred") && !e.target.closest("[data-cred], [data-gadd]")) hideCred(); });
 	$("content").addEventListener("scroll", hideCred);
 	// ☆/★ 누르면 바로 저장 (저장 중에는 다음 클릭을 받지 않음). 보기 사이트에서는 바꾸지 않음
 	var starring = false;
@@ -278,6 +286,8 @@
 			save(next).then(function () { starring = false; msg(on ? "자주 가는 링크에 넣었습니다." : "자주 가는 링크에서 뺐습니다.", "ok"); });
 			return;
 		}
+		var a = e.target.closest("[data-gadd]");
+		if (a && !editing) { showCred(a, { id: uid("l"), title: "", url: "" }, +a.getAttribute("data-gadd")); return; }
 		var b = e.target.closest("[data-cred]");
 		if (!b || editing) return;
 		e.preventDefault();
