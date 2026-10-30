@@ -135,6 +135,21 @@
 		return h.replace(new RegExp("(" + t + ")", "gi"), "<mark>$1</mark>");
 	}
 
+	// ★ 링크 순서: data.favs (링크 id 순서). 여기 없는 ★ 링크는 카테고리 순서대로 뒤에 붙음
+	function favList(d) {
+		var out = [], order = d.favs || [];
+		d.groups.forEach(function (g) { g.links.forEach(function (l) { if (l.star) out.push({ l: l, g: g }); }); });
+		function rank(x) { var i = order.indexOf(x.l.id); return i < 0 ? order.length + out.indexOf(x) : i; }
+		return out.slice().sort(function (a, b) { return rank(a) - rank(b); });
+	}
+	// next 의 ★ 순서를 지금 보이는 순서로 맞춘 뒤, id 를 빼거나 (before 앞 / 맨 뒤에) 넣음
+	function setFav(next, id, on, before) {
+		var ids = favList(next).map(function (x) { return x.l.id; }).filter(function (x) { return x !== id; });
+		next.groups.forEach(function (g) { g.links.forEach(function (l) { if (l.id === id) { if (on) l.star = true; else delete l.star; } }); });
+		if (on) { var at = before ? ids.indexOf(before) : -1; ids.splice(at < 0 ? ids.length : at, 0, id); }
+		next.favs = ids;
+	}
+
 	// 카테고리 배경색 ([편집]에서 고름, "" = 색 없음): 제목줄은 그 색, 링크 목록은 흰색과 반반 섞은 더 연한 색
 	var COLORS = ["", "#fef3c7", "#ffedd5", "#fee2e2", "#fce7f3", "#ede9fe", "#dbeafe", "#cffafe", "#dcfce7", "#ecfccb", "#e2e8f0"];
 	function lighter(hex) {
@@ -159,8 +174,7 @@
 		}
 		function match(l, g) { return !lc || (l.title + " " + l.url + " " + g.title).toLowerCase().indexOf(lc) >= 0; }
 		// 맨 앞: ★ 표시한 링크만 모은 카드 (원래 카테고리에도 그대로 있음)
-		var favs = [];
-		data.groups.forEach(function (g) { g.links.forEach(function (l) { if (l.star && match(l, g)) favs.push(l); }); });
+		var favs = favList(data).filter(function (x) { return match(x.l, x.g); }).map(function (x) { return x.l; });
 		var h = favs.length ? '<section class="card fav"><header>★ 자주 가는 링크<span class="cnt">' + favs.length + "</span></header><ul>" + favs.map(li).join("") + "</ul></section>" : "";
 		h += data.groups.map(function (g, gi) {
 			total += g.links.length;
@@ -258,7 +272,8 @@
 		if (s && !editing) {
 			if (window.MK_STATIC || starring) return;
 			var sid = s.getAttribute("data-star"), next = JSON.parse(JSON.stringify(data)), on = false;
-			next.groups.forEach(function (g) { g.links.forEach(function (l) { if (l.id === sid) { on = !l.star; if (on) l.star = true; else delete l.star; } }); });
+			next.groups.forEach(function (g) { g.links.forEach(function (l) { if (l.id === sid) on = !l.star; }); });
+			setFav(next, sid, on);
 			starring = true;
 			save(next).then(function () { starring = false; msg(on ? "자주 가는 링크에 넣었습니다." : "자주 가는 링크에서 뺐습니다.", "ok"); });
 			return;
@@ -360,8 +375,8 @@
 		} else return;
 		renderEdit();
 	});
-	// 보기 화면에서 끌어서 옮기기 (놓으면 바로 저장): 링크 줄 위에 놓으면 그 앞에, 카드 빈 곳이면 맨 뒤에,
-	// 맨 앞 '★ 자주 가는 링크' 카드에 놓으면 별표만 붙임
+	// 보기 화면에서 끌어서 옮기기 (놓으면 바로 저장): 링크 줄 위에 놓으면 그 앞에, 카드 빈 곳이면 맨 뒤에
+	//   '★ 자주 가는 링크' 카드에 놓으면 별표를 붙이고 그 자리에 (★ 카드 안에서는 순서만 바뀜, 원래 카테고리는 그대로)
 	var vdrag = null;
 	function clearOver() { $("cards").querySelectorAll(".over, .drag").forEach(function (x) { x.classList.remove("over", "drag"); }); }
 	$("cards").addEventListener("dragstart", function (e) {
@@ -380,7 +395,7 @@
 		if (!c) return;
 		e.preventDefault();
 		$("cards").querySelectorAll(".over").forEach(function (x) { x.classList.remove("over"); });
-		(c.classList.contains("fav") ? c : e.target.closest("li[data-lid]") || c).classList.add("over");
+		(e.target.closest("li[data-lid]") || c).classList.add("over");
 	});
 	$("cards").addEventListener("drop", function (e) {
 		if (editing || !vdrag) return;
@@ -391,8 +406,9 @@
 		if (!c || (r && r.getAttribute("data-lid") === id)) return;
 		var next = JSON.parse(JSON.stringify(data)), moved = null;
 		if (c.classList.contains("fav")) {
-			next.groups.forEach(function (g) { g.links.forEach(function (l) { if (l.id === id) { l.star = true; moved = l; } }); });
-			save(next).then(function () { msg("자주 가는 링크에 넣었습니다.", "ok"); });
+			var was = favList(data).some(function (x) { return x.l.id === id; });
+			setFav(next, id, true, r ? r.getAttribute("data-lid") : null);
+			save(next).then(function () { msg(was ? "자주 가는 링크 순서를 바꿨습니다." : "자주 가는 링크에 넣었습니다.", "ok"); });
 			return;
 		}
 		next.groups.forEach(function (g) { var i = g.links.map(function (l) { return l.id; }).indexOf(id); if (i >= 0) moved = g.links.splice(i, 1)[0]; });
