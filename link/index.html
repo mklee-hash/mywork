@@ -29,9 +29,10 @@
 	.card li .star + a { padding-left: 4px; }
 	.card.fav { border-color: #fcd34d; }
 	.card.fav > header { background: #fffbeb; color: #92400e; border-bottom-color: #fde68a; border-radius: 10px 10px 0 0; }
-	/* 배경색이 있는 카드: 줄 구분선 · 마우스 올림을 살짝 진하게 */
-	.card[style] > header { border-bottom-color: rgba(15, 23, 42, .1); }
-	.card[style] li a:hover { background: rgba(255, 255, 255, .6); }
+	/* 배경색이 있는 카드: 제목줄 = 고른 색(--c), 링크 목록 = 더 연한 색(--cl) */
+	.card[style] { background: var(--cl); }
+	.card[style] > header { background: var(--c); border-bottom-color: rgba(15, 23, 42, .1); border-radius: 10px 10px 0 0; }
+	.card[style] li a:hover { background: rgba(255, 255, 255, .7); }
 	.edit .pal { display: flex; gap: 4px; padding: 6px 12px 2px; }
 	.edit .pal span { width: 18px; height: 18px; border: 1px solid rgba(15, 23, 42, .2); border-radius: 50%; cursor: pointer; font-size: 11px; line-height: 16px; text-align: center; color: #94a3b8; }
 	.edit .pal span.on { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -129,9 +130,12 @@
 		return h.replace(new RegExp("(" + t + ")", "gi"), "<mark>$1</mark>");
 	}
 
-	// 카테고리 배경색 ([편집]에서 고름, "" = 색 없음). 연한 색이라 글자는 그대로 읽힘
+	// 카테고리 배경색 ([편집]에서 고름, "" = 색 없음): 제목줄은 그 색, 링크 목록은 흰색과 반반 섞은 더 연한 색
 	var COLORS = ["", "#fef3c7", "#ffedd5", "#fee2e2", "#fce7f3", "#ede9fe", "#dbeafe", "#cffafe", "#dcfce7", "#ecfccb", "#e2e8f0"];
-	function bgStyle(g) { return g.color && COLORS.indexOf(g.color) > 0 ? ' style="background:' + g.color + '"' : ""; }
+	function lighter(hex) {
+		return "#" + [1, 3, 5].map(function (i) { var v = Math.round((parseInt(hex.substr(i, 2), 16) + 255) / 2); return (v < 16 ? "0" : "") + v.toString(16); }).join("");
+	}
+	function bgStyle(g) { return g.color && COLORS.indexOf(g.color) > 0 ? ' style="--c:' + g.color + ";--cl:" + lighter(g.color) + '"' : ""; }
 
 	// ---------------------------------------------------------------- 보기
 	function render() {
