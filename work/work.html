@@ -27,6 +27,21 @@
 	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
 	table.list td.k-act { width: 40px; text-align: right; }
 	.filters .btn.on { font-weight: bold; }
+	/* 작업 개요 요약 */
+	.ovw .ovb { padding: 12px 18px 14px; line-height: 1.6; }
+	.ovw .lead { margin: 0 0 10px; color: #334155; }
+	.ovw .outline { list-style: none; margin: 0; padding: 0; }
+	.ovw .outline li { padding: 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.ovw .outline li.l2 { padding-left: 22px; font-size: 12.5px; }
+	.ovw .outline .n { display: inline-block; min-width: 26px; color: var(--accent); }
+	.ovw .outline .snip { color: var(--muted); }
+	.ovw .stats { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+	.ovw .ai { margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #f5f3ff; border: 1px solid #ddd6fe; }
+	.ovw .ai .aih { margin-bottom: 4px; font-weight: bold; color: #5b21b6; font-size: 13px; }
+	.ovw .ai .aih .muted { font-weight: normal; font-size: 12px; }
+	.ovw .ai .stale { font-weight: normal; font-size: 12px; color: #b45309; }
+	.ovw .ai ul { margin: 0; padding-left: 20px; }
+	.ovw .ai li { margin: 2px 0; }
 	select.sts { height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 12px; font: inherit; font-size: 12px; cursor: pointer; background: #e2e8f0; color: #334155; }
 	select.sts:hover { border-color: var(--line2); }
 	select.sts.s-진행중 { background: #dbeafe; color: #1e40af; }
@@ -109,19 +124,77 @@
 			});
 			h.push("</tbody></table>");
 		}
+		// 아래: 작업 개요 요약 ([전체 보기]로 개요 문서)
+		h.push('</section><section class="card ovw"><header><h3>📄 작업 개요</h3><span class="muted">요약</span><span class="spacer"></span>'
+			+ '<button class="btn rw" id="bAi" title="개요 본문과 할일 목록을 사내 AI(EKA)로 요약해 저장">✨ ' + (overviewDoc && overviewDoc.aiSummary ? "AI 다시 요약" : "AI 요약") + "</button>"
+			+ '<button class="btn" data-open="' + esc(work.id) + '">' + (window.MK_STATIC ? "전체 보기" : "전체 보기 · 고치기") + "</button></header>"
+			+ '<div class="ovb">' + overviewHtml + "</div>");
 		$("content").innerHTML = h.join("") + "</section>";
 		var done = todos.filter(function (t) { return t.status === "완료"; }).length;
 		$("sInfo").textContent = "할일 " + todos.length + "개 · 완료 " + done + "개";
 	}
 
+	// 작업 개요 요약: AI 요약(저장된 것) + 첫 문단 + 장 제목(번호)과 그 장의 첫 줄 + 표·그림 개수
+	var overviewHtml = "", overviewDoc = null;
+	function clip(s, n) { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n) + "…" : s; }
+	function overviewOf(j) {
+		var t = document.createElement("template");
+		t.innerHTML = (j && j.html) || "";
+		var root = t.content, hs = root.querySelectorAll("h1, h2"), out = [];
+		if (j && j.aiSummary) {
+			// 요약한 뒤에 개요를 고쳤으면 알려 줌 (상태만 바꾼 것도 저장 시각이 바뀌므로 '고쳤을 수 있음')
+			var stale = j.savedAt && j.aiSummaryAt && j.savedAt > j.aiSummaryAt;
+			out.push('<div class="ai"><div class="aih">✨ AI 요약 <span class="muted">' + esc(j.aiSummaryAt || "") + "</span>"
+				+ (stale ? ' <span class="stale">요약 뒤에 개요가 바뀌었을 수 있습니다</span>' : "") + "</div><ul>"
+				+ String(j.aiSummary).split("\n").map(function (l) { return l.replace(/^\s*[-•*]\s*/, "").trim(); }).filter(Boolean)
+					.map(function (l) { return "<li>" + esc(l) + "</li>"; }).join("") + "</ul></div>");
+		}
+		// 첫 문단: 첫 제목 앞의 글 (없으면 첫 제목 다음 글), 단 문서 제목과 같은 글은 뺌
+		var lead = "";
+		for (var el = root.firstElementChild; el && !/^H[12]$/.test(el.tagName); el = el.nextElementSibling) lead += " " + el.textContent;
+		if (!clip(lead, 1) && hs[0]) lead = nextText(hs[0]);
+		if (clip(lead, 1)) out.push('<p class="lead">' + esc(clip(lead, 180)) + "</p>");
+		// 장 제목: 문서 번호와 같게 (제목만 있고 내용 없는 작업 이름 제목은 뺌)
+		var n1 = 0, n2 = 0, items = [];
+		Array.prototype.forEach.call(hs, function (h) {
+			var lv = h.tagName === "H1" ? 1 : 2, num;
+			if (lv === 1) { n1++; n2 = 0; num = n1 + "."; } else { n2++; num = n1 + "." + n2; }
+			var title = clip(h.textContent, 60);
+			if (!title || (lv === 1 && title === work.title && !nextText(h))) return;
+			items.push('<li class="l' + lv + '"><span class="n">' + num + "</span><b>" + esc(title) + "</b>"
+				+ (nextText(h) ? ' <span class="snip">— ' + esc(clip(nextText(h), 70)) + "</span>" : "") + "</li>");
+		});
+		if (items.length) out.push('<ul class="outline">' + items.join("") + "</ul>");
+		var nt = root.querySelectorAll("table").length, ni = root.querySelectorAll("img").length;
+		if (nt || ni) out.push('<p class="stats">' + [nt ? "표 " + nt + "개" : "", ni ? "그림 " + ni + "개" : ""].filter(Boolean).join(" · ") + "</p>");
+		return out.join("") || '<p class="muted">작업 개요가 비어 있습니다.</p>';
+	}
+	// 제목 바로 뒤에 오는 글 (다음 제목 전까지 처음 나오는 글)
+	function nextText(h) {
+		for (var el = h.nextElementSibling; el && !/^H[12]$/.test(el.tagName); el = el.nextElementSibling) {
+			var s = clip(textOf(el), 400);
+			if (s) return s;
+		}
+		return "";
+	}
+	// 목록은 항목을 쉼표로, 표는 앞 칸 몇 개를 · 로 이어서
+	function textOf(el) {
+		if (/^(OL|UL)$/.test(el.tagName)) return Array.prototype.map.call(el.children, function (li) { return li.textContent.trim(); }).filter(Boolean).join(", ");
+		if (el.tagName === "TABLE") return Array.prototype.slice.call(el.querySelectorAll("td, th"), 0, 6).map(function (c) { return c.textContent.trim(); }).filter(Boolean).join(" · ");
+		return el.textContent;
+	}
+
 	function load() {
 		return Promise.all([
 			fetch(API + "&list=1", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
-			fetch(API + "&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; })
+			fetch(API + "&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; }),
+			fetch(API + "&doc=" + encodeURIComponent(ID), { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
 		]).then(function (x) {
 			cats = x[1];
 			work = x[0].filter(function (w) { return w.id === ID; })[0];
 			if (!work) throw new Error("없는 작업입니다.");
+			overviewDoc = x[2];
+			overviewHtml = overviewOf(x[2]);
 			// 할일은 만든 순서
 			todos = x[0].filter(function (t) { return t.parent === ID; })
 				.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
@@ -131,6 +204,16 @@
 
 	$("bBack").onclick = function () { location.href = "index" + EXT + "?cat=" + CAT; };
 	$("bOverview").onclick = function () { location.href = docUrl(ID); };
+	// AI 요약: 누를 때만 사내 AI(EKA)를 부르고, 결과는 작업 문서(aiSummary)에 저장해 다음부터는 저장된 것을 보여 줌
+	function aiSummary(btn) {
+		btn.disabled = true;
+		btn.textContent = "✨ 요약 중… (10초 정도)";
+		msg("AI 요약 중…");
+		fetch("../common/summary.jsp?doc=" + encodeURIComponent(ID), { method: "POST" })
+			.then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+			.then(function (j) { return patchDoc(ID, { aiSummary: j.summary, aiSummaryAt: now() }, "AI 요약을 저장했습니다."); })
+			.catch(function (e) { msg("AI 요약 실패: " + e.message, "err"); btn.disabled = false; btn.textContent = "✨ AI 요약"; });
+	}
 	// 일부 값만 바꿔 저장: 문서를 받아 그 값만 고쳐 다시 저장 (버전 확인은 그대로)
 	function patchDoc(id, fields, done) {
 		var ver = "";
@@ -166,6 +249,7 @@
 		if (e.target.closest("select")) return;
 		var b = e.target.closest("[data-f]");
 		if (b) { filter = b.getAttribute("data-f"); render(); return; }
+		if (e.target.closest("#bAi")) { aiSummary(e.target.closest("#bAi")); return; }
 		b = e.target.closest("[data-ren]");
 		if (b) {
 			e.stopPropagation();

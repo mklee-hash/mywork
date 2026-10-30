@@ -417,7 +417,8 @@
 		msg("저장 중…");
 		var body = WORK
 			? { type: "doc", title: $("tTitle").value.trim() || "제목 없음", parent: data.parent || "", category: data.parent ? data.category || "" : $("tCat").value,
-				status: $("tStatus").value, createdAt: data.createdAt || now(), savedAt: now(), html: ed.innerHTML }
+				status: $("tStatus").value, createdAt: data.createdAt || now(), savedAt: now(), html: ed.innerHTML,
+				aiSummary: data.aiSummary, aiSummaryAt: data.aiSummaryAt }   // AI 요약은 할일 목록 화면에서 만든 것 그대로 둠
 			: { type: "doc", title: data.title, source: data.source, importedAt: data.importedAt, savedAt: now(), html: ed.innerHTML };
 		fetch(API + "&ver=" + encodeURIComponent(ver) + (force ? "&force=1" : ""), {
 			method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body)
