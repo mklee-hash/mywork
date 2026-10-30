@@ -29,6 +29,12 @@
 	.card li .star + a { padding-left: 4px; }
 	.card.fav { border-color: #fcd34d; }
 	.card.fav > header { background: #fffbeb; color: #92400e; border-bottom-color: #fde68a; border-radius: 10px 10px 0 0; }
+	/* 배경색이 있는 카드: 줄 구분선 · 마우스 올림을 살짝 진하게 */
+	.card[style] > header { border-bottom-color: rgba(15, 23, 42, .1); }
+	.card[style] li a:hover { background: rgba(255, 255, 255, .6); }
+	.edit .pal { display: flex; gap: 4px; padding: 6px 12px 2px; }
+	.edit .pal span { width: 18px; height: 18px; border: 1px solid rgba(15, 23, 42, .2); border-radius: 50%; cursor: pointer; font-size: 11px; line-height: 16px; text-align: center; color: #94a3b8; }
+	.edit .pal span.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 	.card li .key:hover { color: #0f766e; background: #f0fdfa; }
 	#cred { position: fixed; z-index: 95; display: none; width: 340px; max-width: calc(100% - 16px); padding: 10px 12px; background: #fff; border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, .2); font-size: 13px; }
 	#cred.open { display: block; }
@@ -123,6 +129,10 @@
 		return h.replace(new RegExp("(" + t + ")", "gi"), "<mark>$1</mark>");
 	}
 
+	// 카테고리 배경색 ([편집]에서 고름, "" = 색 없음). 연한 색이라 글자는 그대로 읽힘
+	var COLORS = ["", "#fef3c7", "#ffedd5", "#fee2e2", "#fce7f3", "#ede9fe", "#dbeafe", "#cffafe", "#dcfce7", "#ecfccb", "#e2e8f0"];
+	function bgStyle(g) { return g.color && COLORS.indexOf(g.color) > 0 ? ' style="background:' + g.color + '"' : ""; }
+
 	// ---------------------------------------------------------------- 보기
 	function render() {
 		$("content").classList.toggle("edit", editing);
@@ -146,7 +156,7 @@
 			var ls = g.links.filter(function (l) { return match(l, g); });
 			if (lc && !ls.length) return "";
 			shown += ls.length;
-			return '<section class="card"><header>' + hl(g.title) + '<span class="cnt">' + ls.length + "</span></header><ul>" + ls.map(li).join("") + "</ul></section>";
+			return '<section class="card"' + bgStyle(g) + '><header>' + hl(g.title) + '<span class="cnt">' + ls.length + "</span></header><ul>" + ls.map(li).join("") + "</ul></section>";
 		}).join("");
 		$("cards").innerHTML = h || '<div class="empty">' + (data.groups.length ? "찾는 링크가 없습니다." : "링크가 없습니다." + (window.MK_STATIC ? "" : " [크롬 즐겨찾기 가져오기] 또는 [편집]으로 넣으세요.")) + "</div>";
 		$("qn").textContent = term ? shown + "개" : "";
@@ -255,8 +265,11 @@
 	var draft = null;
 	function renderEdit() {
 		$("cards").innerHTML = draft.groups.map(function (g, gi) {
-			return '<section class="card" data-g="' + gi + '"><header><input class="inp" data-gt value="' + esc(g.title) + '" placeholder="카테고리 이름">'
+			return '<section class="card" data-g="' + gi + '"' + bgStyle(g) + '><header><input class="inp" data-gt value="' + esc(g.title) + '" placeholder="카테고리 이름">'
 				+ '<button class="ib" data-gmv="-1" title="앞으로">▲</button><button class="ib" data-gmv="1" title="뒤로">▼</button><button class="ib" data-gdel title="카테고리 삭제">✕</button></header>'
+				+ '<div class="pal" title="카테고리 배경색">' + COLORS.map(function (c) {
+					return '<span data-gc="' + c + '" class="' + ((g.color || "") === c ? "on" : "") + '" style="background:' + (c || "#fff") + '" title="' + (c ? c : "색 없음") + '">' + (c ? "" : "∅") + "</span>";
+				}).join("") + "</div>"
 				+ g.links.map(function (l, li) {
 					return '<div class="lk' + (hasCred(l) ? " open" : "") + '" draggable="true" data-l="' + li + '"><div class="lm"><span class="h" title="끌어서 옮기기">⋮⋮</span>'
 						+ '<input class="inp t" data-lt value="' + esc(l.title) + '" placeholder="이름"><input class="inp u" data-lu value="' + esc(l.url) + '" placeholder="https://">'
@@ -316,7 +329,9 @@
 		}
 		collect();
 		var gi = +c.getAttribute("data-g"), g = draft.groups[gi];
-		if (t.hasAttribute("data-gmv")) {
+		if (t.hasAttribute("data-gc")) {
+			if (t.getAttribute("data-gc")) g.color = t.getAttribute("data-gc"); else delete g.color;
+		} else if (t.hasAttribute("data-gmv")) {
 			var to = gi + +t.getAttribute("data-gmv");
 			if (to < 0 || to >= draft.groups.length) return;
 			draft.groups.splice(to, 0, draft.groups.splice(gi, 1)[0]);
