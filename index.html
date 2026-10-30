@@ -68,7 +68,7 @@
 </head>
 <body>
 <div id="top">
-	<h1><a href="#"><img src="common/favicon.svg" alt="">MY Work</a></h1>
+	<h1><a href="#"><img id="logo" src="common/favicon.svg" alt="">MY Work</a></h1>
 	<nav id="tabs"></nav>
 	<span class="spacer"></span>
 	<span class="tb" id="tbar"></span>
@@ -97,7 +97,7 @@
 </div>
 
 <script type="application/json" id="rootMenu">[
-  {"id": "support", "title": "고객지원", "local": true, "pcOnly": true, "items": [{"id": "home", "title": "고객지원", "url": "http://127.0.0.1:17890/"}]},
+  {"id": "support", "title": "고객지원", "local": true, "pcOnly": true, "items": [{"id": "home", "title": "고객지원", "url": "http://127.0.0.1:17890/?u=mklee%40forcs.com&e=1793447105835&s=vjtkIfhXJ1nFalrrtkuecddKfcq-qdgeJVbP6k4U2SA"}]},
   {"id": "work", "title": "작업내역", "local": true, "categories": true},
   {"id": "server", "title": "서버관리", "local": true, "menu": "server/menu.json"},
   {"id": "skill", "title": "스킬", "items": [{"id": "home", "title": "스킬", "path": "common/soon", "query": "m=skill"}]},
@@ -151,6 +151,8 @@
 ]}</script>
 <script>
 	var STATIC = !!window.MK_STATIC, EXT = STATIC ? ".html" : ".jsp";
+	// 보기 사이트는 보라색 MW 로고
+	if (STATIC) document.getElementById("logo").src = "common/favicon-view.svg";
 	var LOCAL = STATIC || true;
 	var USER = STATIC ? null : null;
 	var tabs = [];
@@ -274,14 +276,17 @@
 		$("tbar").innerHTML = '<span>보기 전용 · <span id="pubAt" style="color:#f87171;font-weight:bold"></span></span><button id="bLock" title="이 브라우저에서 비밀번호 잊기">잠그기</button>';
 		$("bLock").onclick = function () { MK_LOCK(); };
 	} else if (true) {
-		$("tbar").innerHTML = '<span id="pubSt" title="GitHub 보기 사이트 반영 상태"></span><button id="bPub" title="GitHub 보기 사이트 (암호화해서 올림)">⬆ GitHub</button>'
-			+ (USER ? '<span title="Google 로그인">' + esc(USER) + '</span><button id="bOut">로그아웃</button>' : "");
-		if (USER) $("bOut").onclick = function () {
-			fetch("common/auth.jsp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "action=logout" }).then(function () { location.reload(); });
-		};
+		// GitHub 보기 사이트는 이 PC 주인 것만 올림
+		$("tbar").innerHTML = '<span id="pubSt" title="GitHub 보기 사이트 반영 상태"></span><button id="bPub" title="GitHub 보기 사이트 (암호화해서 올림)">⬆ GitHub</button>';
 		$("bPub").onclick = function () { $("pub").classList.add("open"); pubStatus(); };
 		pubStatus();
 		setInterval(pubStatus, 10000);
+	}
+	if (!STATIC && USER) {
+		$("tbar").insertAdjacentHTML("beforeend", '<span title="Google 로그인">' + esc(USER) + '</span><button id="bOut">로그아웃</button>');
+		$("bOut").onclick = function () {
+			fetch("common/auth.jsp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "action=logout" }).then(function () { location.reload(); });
+		};
 	}
 	// 반영 상태: 대기(저장 후 15초) / 올리는 중 / 반영됨 / 실패 / 꺼짐
 	var pubKey = false;

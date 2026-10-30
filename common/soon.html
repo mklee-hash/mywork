@@ -15,10 +15,12 @@
 <body>
 <div class="box"><h2 id="h"></h2><p id="p"></p></div>
 <script>
-	var q = new URLSearchParams(location.search), m = q.get("m");
+	var q = new URLSearchParams(location.search), m = q.get("m"), t = q.get("t") || "내 PC 전용";
+	// 내 PC 전용인 이유 (메뉴별)
+	var WHY = { "고객지원": "고객지원은 내 PC의 MY Work agent가 HDMS·메일·질답을 실시간으로 확인하는 화면이라 GitHub 보기 사이트에서는 볼 수 없습니다." };
 	var T = {
 		skill: ["스킬", "준비 중입니다. 어떤 내용을 둘지 정해지면 이 메뉴에 화면을 만듭니다."],
-		pc: [q.get("t") || "내 PC 전용", "OZ 서버가 필요한 화면이라 GitHub 보기 사이트에서는 동작하지 않습니다. 내 PC의 http://127.0.0.1/mywork 에서 여세요."]
+		pc: [t, (WHY[t] || "OZ 서버가 필요한 화면이라 GitHub 보기 사이트에서는 동작하지 않습니다.") + " 내 PC의 MY Work(http://localhost/mywork)에서 여세요."]
 	}[m] || ["MY Work", ""];
 	document.getElementById("h").textContent = T[0];
 	document.getElementById("p").textContent = T[1];
