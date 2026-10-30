@@ -30,6 +30,22 @@
 	#cats td.a { width: 80px; white-space: nowrap; text-align: right; }
 	#cats .inp { width: 100%; }
 	#cats .row { display: flex; gap: 8px; align-items: center; }
+	/* 포스트잇 메모 (작업 목록 아래) */
+	#memos { max-width: 1400px; margin: 0 auto; }
+	#memos > header { display: flex; align-items: center; gap: 10px; margin: 6px 2px 10px; }
+	#memos > header h3 { margin: 0; font-size: 15px; }
+	#memoBoard { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+	.memo { position: relative; width: 230px; min-height: 170px; display: flex; flex-direction: column; border-radius: 3px 3px 3px 18px; box-shadow: 0 2px 6px rgba(15, 23, 42, .12), 0 8px 18px rgba(15, 23, 42, .06); }
+	.memo .mh { display: flex; align-items: center; gap: 4px; padding: 5px 6px 0 10px; opacity: .35; transition: opacity .15s; }
+	.memo:hover .mh, .memo:focus-within .mh { opacity: 1; }
+	.memo .mh .at { flex: 1; font-size: 11px; color: rgba(15, 23, 42, .55); }
+	.memo .mh .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(15, 23, 42, .25); cursor: pointer; }
+	.memo .mh .x { border: 0; background: none; color: rgba(15, 23, 42, .5); cursor: pointer; font-size: 13px; padding: 0 2px; }
+	.memo .mh .x:hover { color: #b91c1c; }
+	.memo .cat { position: absolute; right: 8px; bottom: 6px; font-size: 10.5px; color: rgba(15, 23, 42, .45); }
+	.memo textarea { flex: 1; min-height: 140px; margin: 0; padding: 6px 12px 22px; border: 0; background: transparent; resize: vertical; outline: none; font: inherit; font-size: 13.5px; line-height: 1.6; color: #1f2937; }
+	.memo.add { align-items: center; justify-content: center; border: 2px dashed #cbd5e1; background: transparent; box-shadow: none; color: #94a3b8; font-size: 15px; cursor: pointer; }
+	.memo.add:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -49,7 +65,7 @@
 		<div class="row"><button class="btn" id="catAdd">＋ 카테고리 추가</button><span class="spacer"></span><button class="btn" id="catClose">닫기</button><button class="btn primary" id="catSave">저장</button></div>
 	</div>
 </div>
-<div id="content"></div>
+<div id="content"><div id="lists"></div><div id="memos"></div></div>
 <div id="status">
 	<span id="sInfo"></span>
 	<span class="spacer"></span>
@@ -115,7 +131,7 @@
 		}
 		if (hold.length) h.push('<section class="card hold"><header><h3>보류</h3><span class="cnt">' + hold.length + "</span></header>" + table(hold) + "</section>");
 		if (done.length) h.push('<section class="card done"><header><h3>완료된 작업</h3><span class="cnt">' + done.length + "</span></header>" + table(done) + "</section>");
-		$("content").innerHTML = h.join("");
+		$("lists").innerHTML = h.join("");
 		$("sInfo").textContent = (all ? "" : catTitle(CAT) + " " + mine.length + "건 · ") + "전체 작업 " + works().length + "건";
 	}
 
@@ -214,7 +230,85 @@
 			.catch(function (e) { msg("카테고리 저장 실패: " + e.message, "err"); });
 	};
 
-	load();
+	// ---------------------------------------------------------------- 포스트잇 메모
+	// 데이터: ../common/data.jsp?space=memo&doc=memos  { memos: [{ id, cat, text, color, at }] }
+	//   카테고리에서 붙인 메모는 그 카테고리에, '전체'에서는 모든 메모가 보임. 쓰면 1초 뒤 저장
+	var MEMO_API = "../common/data.jsp?space=memo&doc=memos";
+	var MEMO_COLORS = ["#fef08a", "#fbcfe8", "#bbf7d0", "#bae6fd", "#ddd6fe"];
+	var memoData = { type: "memos", memos: [] }, memoVer = "", memoTimer = null, memoSaving = null;
+	function memosHere() { return memoData.memos.filter(function (m) { return CAT === "all" || m.cat === CAT; }); }
+	function renderMemos() {
+		var ms = memosHere(), ro = window.MK_STATIC ? " readonly" : "";
+		$("memos").innerHTML = '<header><h3>📌 메모</h3><span class="cnt">' + ms.length + "</span></header>"
+			+ '<div id="memoBoard">' + ms.map(function (m) {
+				return '<div class="memo" data-mid="' + esc(m.id) + '" style="background:' + esc(m.color || MEMO_COLORS[0]) + '">'
+					+ '<div class="mh"><span class="at">' + esc(m.at || "") + "</span>"
+					+ (window.MK_STATIC ? "" : MEMO_COLORS.map(function (c) { return '<span class="dot" data-mc="' + c + '" style="background:' + c + '" title="색 바꾸기"></span>'; }).join("")
+						+ '<button class="x" data-mdel title="메모 지우기">✕</button>')
+					+ "</div><textarea placeholder=\"메모\"" + ro + ">" + esc(m.text) + "</textarea>"
+					+ (CAT === "all" && m.cat && m.cat !== "all" ? '<span class="cat">' + esc(catTitle(m.cat)) + "</span>" : "") + "</div>";
+			}).join("") + (window.MK_STATIC ? "" : '<div class="memo add" id="memoAdd" title="메모 붙이기">＋ 메모</div>') + "</div>";
+	}
+	function memoById(id) { return memoData.memos.filter(function (m) { return m.id === id; })[0]; }
+	// 저장은 한 번에 하나씩 (쓰는 동안 또 바뀌면 끝난 뒤 다시)
+	function saveMemos() {
+		clearTimeout(memoTimer);
+		if (memoSaving) { memoSaving.again = true; return; }
+		memoData.savedAt = now();
+		var job = memoSaving = { again: false };
+		fetch(MEMO_API + "&ver=" + encodeURIComponent(memoVer) + "&force=1", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(memoData) })
+			.then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+			.then(function (j) { memoVer = j.ver; msg("메모를 저장했습니다.", "ok"); })
+			.catch(function (e) { msg("메모 저장 실패: " + e.message, "err"); })
+			.then(function () { memoSaving = null; if (job.again) saveMemos(); });
+	}
+	function saveMemosSoon() { clearTimeout(memoTimer); memoTimer = setTimeout(saveMemos, 1000); }
+	$("memos").addEventListener("input", function (e) {
+		var box = e.target.closest(".memo[data-mid]");
+		if (!box || e.target.tagName !== "TEXTAREA") return;
+		var m = memoById(box.getAttribute("data-mid"));
+		m.text = e.target.value;
+		m.at = now().slice(0, 16);
+		box.querySelector(".at").textContent = m.at;
+		saveMemosSoon();
+	});
+	$("memos").addEventListener("focusout", function (e) { if (e.target.tagName === "TEXTAREA" && memoTimer) saveMemos(); });
+	$("memos").addEventListener("click", function (e) {
+		if (window.MK_STATIC) return;
+		if (e.target.closest("#memoAdd")) {
+			var m = { id: "m" + Date.now().toString(36), cat: CAT, text: "", color: MEMO_COLORS[0], at: now().slice(0, 16) };
+			memoData.memos.push(m);
+			renderMemos();
+			$("memos").querySelector('[data-mid="' + m.id + '"] textarea').focus();
+			saveMemos();
+			return;
+		}
+		var box = e.target.closest(".memo[data-mid]");
+		if (!box) return;
+		var m = memoById(box.getAttribute("data-mid"));
+		if (e.target.hasAttribute("data-mc")) {
+			m.color = e.target.getAttribute("data-mc");
+			box.style.background = m.color;
+			saveMemos();
+		} else if (e.target.hasAttribute("data-mdel")) {
+			if (m.text.trim() && !confirm("이 메모를 지울까요?\n(WEB-INF/data/memo/_backup 에 남습니다)")) return;
+			memoData.memos.splice(memoData.memos.indexOf(m), 1);
+			renderMemos();
+			saveMemos();
+		}
+	});
+	window.addEventListener("beforeunload", function () { if (memoTimer) saveMemos(); });
+	function loadMemos() {
+		return fetch(MEMO_API, { cache: "no-store" }).then(function (r) {
+			if (r.status === 404) return null;
+			if (!r.ok) throw new Error(r.status);
+			memoVer = r.headers.get("X-Ver") || "";
+			return r.json();
+		}).then(function (j) { if (j && j.memos) memoData = j; renderMemos(); })
+			.catch(function (e) { renderMemos(); msg("메모를 불러오지 못했습니다: " + e.message, "err"); });
+	}
+
+	load().then(loadMemos);
 </script>
 </body>
 </html>
