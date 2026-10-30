@@ -152,6 +152,7 @@
 <script>
 	var STATIC = !!window.MK_STATIC, EXT = STATIC ? ".html" : ".jsp";
 	var LOCAL = STATIC || true;
+	var USER = STATIC ? null : null;
 	var tabs = [];
 
 	function $(id) { return document.getElementById(id); }
@@ -273,7 +274,11 @@
 		$("tbar").innerHTML = '<span>보기 전용 · <span id="pubAt" style="color:#f87171;font-weight:bold"></span></span><button id="bLock" title="이 브라우저에서 비밀번호 잊기">잠그기</button>';
 		$("bLock").onclick = function () { MK_LOCK(); };
 	} else if (true) {
-		$("tbar").innerHTML = '<span id="pubSt" title="GitHub 보기 사이트 반영 상태"></span><button id="bPub" title="GitHub 보기 사이트 (암호화해서 올림)">⬆ GitHub</button>';
+		$("tbar").innerHTML = '<span id="pubSt" title="GitHub 보기 사이트 반영 상태"></span><button id="bPub" title="GitHub 보기 사이트 (암호화해서 올림)">⬆ GitHub</button>'
+			+ (USER ? '<span title="Google 로그인">' + esc(USER) + '</span><button id="bOut">로그아웃</button>' : "");
+		if (USER) $("bOut").onclick = function () {
+			fetch("common/auth.jsp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "action=logout" }).then(function () { location.reload(); });
+		};
 		$("bPub").onclick = function () { $("pub").classList.add("open"); pubStatus(); };
 		pubStatus();
 		setInterval(pubStatus, 10000);

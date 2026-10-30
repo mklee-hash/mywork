@@ -2,6 +2,7 @@
  *   - data.jsp 요청을 암호화된 파일 d/<이름>.bin 읽기로 바꿈 (AES-GCM, 키 = PBKDF2-SHA256(비밀번호))
  *   - 파일 이름 = SHA-256(salt + "|" + 요청 키) 앞 32자리, 요청 키 = "space=..&doc=..[&img=..]" 또는 "space=work&list=1|cats=1"
  *   - 수정/저장 버튼은 숨김 (보기 전용)
+ *   - 여는 방법: Google 로그인(mklee@forcs.com, 키는 내 Drive 의 보기 키 파일 — gauth.js) 또는 비상용 비밀번호
  *   - 비밀번호는 저장하지 않고, 풀린 키만 이 브라우저(sessionStorage, [기억] 시 localStorage)에 둠
  */
 (function () {
@@ -149,17 +150,52 @@
 			else getKey().catch(function (e) { showLock(e.message); });
 		});
 	}
+	// 잠금 화면: Google 로그인(mklee@forcs.com) → 내 Drive 의 보기 키로 열기. 비밀번호는 비상용으로 접어 둠
+	function keepStore() { return document.getElementById("mkKeep").checked ? localStorage : sessionStorage; }
+	function useRaw(rawB64) {
+		return crypto.subtle.importKey("raw", unb64(rawB64), "AES-GCM", true, ["decrypt"]).then(function (key) {
+			return metaP.then(function (m) { return decrypt(key, unb64(m.check)); }).then(function () { return rawB64; });
+		});
+	}
 	function showLock(why) {
 		var d = document.createElement("div");
 		d.id = "mkLock";
-		d.innerHTML = '<form><h2>MY Work</h2><p>' + (why || "보기 전용 사이트입니다. 비밀번호를 넣어야 내용이 보입니다.") + "</p>"
-			+ '<input type="password" id="mkPw" placeholder="비밀번호" autocomplete="current-password" autofocus>'
+		d.innerHTML = '<form><h2>MY Work</h2><p id="mkWhy">' + (why || "보기 전용 사이트입니다.") + "</p>"
+			+ '<button type="button" id="mkG" style="display:none;background:#fff;color:#0f172a;border:1px solid #cbd5e1;font-weight:bold">Google 계정으로 열기</button>'
 			+ '<label><input type="checkbox" id="mkKeep"> 이 브라우저에서 기억</label>'
-			+ '<button type="submit">열기</button><div class="err" id="mkErr"></div></form>';
+			+ '<details id="mkPwBox"><summary style="cursor:pointer;color:#64748b;font-size:13px;margin-bottom:8px">비밀번호로 열기</summary>'
+			+ '<input type="password" id="mkPw" placeholder="비밀번호" autocomplete="current-password">'
+			+ '<button type="submit" style="margin-top:8px">열기</button></details><div class="err" id="mkErr"></div></form>';
 		document.body.appendChild(d);
+		var err = document.getElementById("mkErr"), gBtn = document.getElementById("mkG");
+		metaP.then(function (m) {
+			if (!m.google) { document.getElementById("mkPwBox").open = true; document.getElementById("mkWhy").textContent = why || "보기 전용 사이트입니다. 비밀번호를 넣어야 내용이 보입니다."; return; }
+			document.getElementById("mkWhy").innerHTML = (why ? why + "<br>" : "") + "<b>" + m.google.email + "</b> 구글 계정으로 여세요.";
+			var s = document.createElement("script");
+			s.src = ROOT + "common/gauth.js";
+			s.onload = function () { MW_GAUTH.prepare(m.google.clientId, m.google.email).then(function () { gBtn.style.display = ""; }, function (e) { err.textContent = e.message; }); };
+			document.head.appendChild(s);
+			gBtn.onclick = function () {
+				var tok;
+				err.textContent = "Google 확인 중…";
+				MW_GAUTH.token().then(function (t) {
+					tok = t;
+					return MW_GAUTH.email(t);
+				}).then(function (email) {
+					if (email !== m.google.email.toLowerCase()) throw new Error(email + " 계정은 열 수 없습니다. " + m.google.email + " 으로 로그인해 주세요.");
+					return MW_GAUTH.readKey(tok);
+				}).then(function (raw) {
+					if (!raw) throw new Error("Google Drive 에 보기 키가 없습니다. PC 의 MY Work 에 한 번 로그인하면 연결됩니다.");
+					return useRaw(raw).catch(function () { throw new Error("보기 키가 예전 것입니다. PC 의 MY Work 에 다시 로그인하면 새 키로 맞춰집니다."); });
+				}).then(function (raw) {
+					keepStore().setItem(KEY, raw);
+					location.reload();
+				}).catch(function (e) { err.textContent = e.message; });
+			};
+		});
 		d.querySelector("form").onsubmit = function (e) {
 			e.preventDefault();
-			var pw = document.getElementById("mkPw").value, err = document.getElementById("mkErr");
+			var pw = document.getElementById("mkPw").value;
 			err.textContent = "확인 중…";
 			metaP.then(function (m) {
 				return crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]).then(function (base) {
@@ -168,7 +204,7 @@
 					return decrypt(key, unb64(m.check)).then(function () { return crypto.subtle.exportKey("raw", key); });
 				});
 			}).then(function (raw) {
-				(document.getElementById("mkKeep").checked ? localStorage : sessionStorage).setItem(KEY, b64(raw));
+				keepStore().setItem(KEY, b64(raw));
 				location.reload();
 			}).catch(function () { err.textContent = "비밀번호가 맞지 않습니다."; });
 		};
