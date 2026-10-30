@@ -16,18 +16,24 @@
 	.card li a { display: block; padding: 6px 12px; color: #0f172a; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.card li a:hover { background: #f0fdfa; color: #0f766e; }
 	.card li a .dm { margin-left: 6px; color: #94a3b8; font-size: 11px; }
-	/* 계정·암호가 있는 링크: 오른쪽 'ID/PW' 표시, 누르면 풍선 */
+	/* 링크마다 오른쪽 ✎ (보기 · 수정 창). 계정·암호가 있는 링크는 주황색 */
 	.card li { position: relative; display: flex; align-items: center; }
 	.card li a { flex: 1; min-width: 0; }
-	.card li .key { flex: none; margin-right: 8px; padding: 1px 6px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #475569; font: inherit; font-size: 10.5px; line-height: 15px; cursor: pointer; }
-	.card li .key:hover { border-color: var(--accent); color: #0f766e; background: #f0fdfa; }
-	#cred { position: fixed; z-index: 95; display: none; width: 300px; padding: 10px 12px; background: #fff; border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, .2); font-size: 13px; }
+	.card li .key { margin-right: 6px; color: #cbd5e1; font-size: 13px; }
+	.card li:hover .key { color: #64748b; }
+	.card li .key.on { color: #f59e0b; }
+	.card li .key:hover { color: #0f766e; background: #f0fdfa; }
+	#cred { position: fixed; z-index: 95; display: none; width: 340px; max-width: calc(100% - 16px); padding: 10px 12px; background: #fff; border: 1px solid var(--line2); border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, .2); font-size: 13px; }
 	#cred.open { display: block; }
 	#cred .t { margin-bottom: 6px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	#cred .r { display: flex; align-items: center; gap: 4px; padding: 3px 0; }
 	#cred .r .l { width: 34px; flex: none; color: var(--muted); font-size: 12px; }
 	#cred .r .v { flex: 1; min-width: 0; font-family: Consolas, monospace; word-break: break-all; }
-	#cred .note { margin-top: 4px; color: #475569; white-space: pre-wrap; }
+	#cred .r a.v { font-family: inherit; color: #0563c1; font-size: 12px; }
+	#cred .r .inp.v { height: 28px; font-family: inherit; font-size: 12.5px; }
+	#cred .r textarea.v { height: auto; padding: 4px 8px; resize: vertical; }
+	#cred a.ib { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+	#cred .act { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
 	mark { background: #fde68a; padding: 0; }
 	.empty { padding: 40px; text-align: center; color: var(--muted); }
 	/* 편집: 입력칸이 들어가게 카드를 넓게 */
@@ -125,8 +131,8 @@
 			shown += ls.length;
 			return '<section class="card"><header>' + hl(g.title) + '<span class="cnt">' + ls.length + "</span></header><ul>"
 				+ ls.map(function (l) {
-					return '<li><a href="' + esc(l.url) + '" target="_blank" rel="noopener" title="' + esc(l.url) + '">' + hl(l.title || l.url) + '<span class="dm">' + esc(host(l.url)) + "</span></a>"
-						+ (hasCred(l) ? '<button class="key" data-cred="' + esc(l.id) + '" title="계정 · 암호 보기">ID/PW</button>' : "") + "</li>";
+					return '<li><a href="' + esc(l.url) + '" target="_blank" rel="noopener" title="' + esc(tip(l)) + '">' + hl(l.title || l.url) + '<span class="dm">' + esc(host(l.url)) + "</span></a>"
+						+ '<button class="ib key' + (hasCred(l) ? " on" : "") + '" data-cred="' + esc(l.id) + '" title="' + esc("보기 · 수정\n" + tip(l)) + '">✎</button></li>';
 				}).join("") + "</ul></section>";
 		}).join("");
 		$("cards").innerHTML = h || '<div class="empty">' + (data.groups.length ? "찾는 링크가 없습니다." : "링크가 없습니다." + (window.MK_STATIC ? "" : " [크롬 즐겨찾기 가져오기] 또는 [편집]으로 넣으세요.")) + "</div>";
@@ -136,7 +142,12 @@
 	$("q").addEventListener("input", function () { term = this.value.trim(); render(); });
 
 	// ---------------------------------------------------------------- 계정 · 암호 (ID/PW)
+	// ID · 암호 · 메모 중 하나라도 있으면 ✎ 를 주황색으로
 	function hasCred(l) { return !!(l.user || l.pw || l.note); }
+	// 링크 툴팁: 주소 + ID / PW / 메모 (있는 것만)
+	function tip(l) {
+		return [l.url, l.user ? "ID: " + l.user : "", l.pw ? "PW: " + l.pw : "", l.note ? "메모: " + l.note : ""].filter(Boolean).join("\n");
+	}
 	function copyText(v) {
 		function done() { msg("복사했습니다.", "ok"); }
 		if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(v).then(done); return; }
@@ -148,29 +159,61 @@
 		t.remove();
 		done();
 	}
+	// 링크 하나 보기 · 수정 창 (✎): 칸을 바로 고쳐 [저장]. 주소는 ↗ 로 열기, 계정·암호는 ⧉ 복사, 암호는 가리고 👁 로 보기
+	//   GitHub 보기 사이트에서는 칸이 읽기 전용이고 [저장]이 없음
 	var credLink = null;
 	function showCred(btn, l) {
 		credLink = l;
-		var row = function (label, v, secret) {
-			return '<div class="r"><span class="l">' + label + '</span><span class="v"' + (secret ? ' data-sec="1">••••••' : ">" + esc(v)) + "</span>"
-				+ (secret ? '<button class="ib" data-ceye title="보기/숨기기">👁</button>' : "")
-				+ '<button class="ib" data-ccopy="' + (secret ? "pw" : "user") + '" title="복사">⧉</button></div>';
+		var box = $("cred"), ro = window.MK_STATIC ? " readonly" : "";
+		var f = function (label, k, extra) {
+			return '<label class="r"><span class="l">' + label + "</span>" + (k === "note"
+				? '<textarea class="inp v" data-f="note" rows="2"' + ro + ">" + esc(l.note) + "</textarea>"
+				: '<input class="inp v" data-f="' + k + '" type="' + (k === "pw" ? "password" : "text") + '" value="' + esc(l[k]) + '" autocomplete="' + (k === "pw" ? "new-password" : "off") + '"' + ro + ">")
+				+ (extra || "") + "</label>";
 		};
-		$("cred").innerHTML = '<div class="t">' + esc(l.title) + "</div>" + (l.user ? row("계정", l.user) : "") + (l.pw ? row("암호", l.pw, true) : "")
-			+ (l.note ? '<div class="note">' + esc(l.note) + "</div>" : "");
-		var b = btn.getBoundingClientRect(), box = $("cred");
+		var cp = function (k) { return '<button type="button" class="ib" data-ccopy="' + k + '" title="복사">⧉</button>'; };
+		box.innerHTML = '<div class="t">' + esc(l.title || "링크") + "</div>"
+			+ f("이름", "title")
+			+ f("주소", "url", '<a class="ib" data-copen href="' + esc(l.url) + '" target="_blank" rel="noopener" title="새 탭으로 열기">↗</a>' + cp("url"))
+			+ f("계정", "user", cp("user"))
+			+ f("암호", "pw", '<button type="button" class="ib" data-cpeye title="암호 보기">👁</button>' + cp("pw"))
+			+ f("메모", "note")
+			+ '<div class="act"><button class="btn" data-ccancel>닫기</button><button class="btn primary rw" data-csave>저장</button></div>';
 		box.classList.add("open");
+		var b = btn.getBoundingClientRect();
 		box.style.left = Math.max(8, Math.min(b.right - box.offsetWidth, innerWidth - box.offsetWidth - 8)) + "px";
-		box.style.top = (b.bottom + box.offsetHeight + 8 > innerHeight ? b.top - box.offsetHeight - 4 : b.bottom + 4) + "px";
+		box.style.top = Math.max(8, b.bottom + box.offsetHeight + 8 > innerHeight ? b.top - box.offsetHeight - 4 : b.bottom + 4) + "px";
 	}
 	function hideCred() { $("cred").classList.remove("open"); credLink = null; }
+	function saveCred() {
+		var id = credLink.id, next = JSON.parse(JSON.stringify(data)), vals = {};
+		$("cred").querySelectorAll("[data-f]").forEach(function (el) { vals[el.getAttribute("data-f")] = el.getAttribute("data-f") === "pw" ? el.value : el.value.trim(); });
+		if (!vals.url) { msg("주소를 넣어 주세요.", "err"); return; }
+		if (!/^[a-z][a-z0-9+.-]*:/i.test(vals.url)) vals.url = "https://" + vals.url;
+		next.groups.forEach(function (g) {
+			g.links.forEach(function (l) {
+				if (l.id !== id) return;
+				l.title = vals.title || host(vals.url) || vals.url;
+				l.url = vals.url;
+				["user", "pw", "note"].forEach(function (k) { if (vals[k]) l[k] = vals[k]; else delete l[k]; });
+			});
+		});
+		hideCred();
+		save(next);
+	}
+	function credVal(k) { var el = $("cred").querySelector('[data-f="' + k + '"]'); return el ? el.value : ""; }
 	$("cred").addEventListener("click", function (e) {
-		var t = e.target;
+		var t = e.target.closest("button, a") || e.target;
 		if (!credLink) return;
-		if (t.hasAttribute("data-ceye")) {
-			var v = $("cred").querySelector("[data-sec]");
-			v.textContent = v.textContent === credLink.pw ? "••••••" : credLink.pw;
-		} else if (t.hasAttribute("data-ccopy")) copyText(t.getAttribute("data-ccopy") === "pw" ? credLink.pw : credLink.user);
+		if (t.hasAttribute("data-copen")) { t.href = credVal("url") || credLink.url; return; }
+		if (t.hasAttribute("data-ccopy")) copyText(credVal(t.getAttribute("data-ccopy")));
+		else if (t.hasAttribute("data-ccancel")) hideCred();
+		else if (t.hasAttribute("data-csave")) saveCred();
+		else if (t.hasAttribute("data-cpeye")) { var pi = $("cred").querySelector('[data-f="pw"]'); pi.type = pi.type === "password" ? "text" : "password"; }
+	});
+	$("cred").addEventListener("keydown", function (e) {
+		if (e.key === "Enter" && e.target.tagName === "INPUT" && !window.MK_STATIC) { e.preventDefault(); saveCred(); }
+		else if (e.key === "Escape") hideCred();
 	});
 	document.addEventListener("mousedown", function (e) { if (!e.target.closest("#cred") && !e.target.closest("[data-cred]")) hideCred(); });
 	$("content").addEventListener("scroll", hideCred);

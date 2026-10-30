@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- mkwork 아이콘 (GitHub 보기 사이트): 서류 가방 -->
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <path d="M24 19v-4a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v4" fill="none" stroke="#c4b5fd" stroke-width="4.5" stroke-linecap="round"/>
+  <rect x="9" y="19" width="46" height="33" rx="7" fill="#8b5cf6"/>
+  <path d="M9 33h46" stroke="#5b21b6" stroke-width="3.5"/>
+  <rect x="27" y="28.5" width="10" height="9" rx="2.5" fill="#f8fafc"/>
+</svg>

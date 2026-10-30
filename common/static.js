@@ -29,6 +29,10 @@
 		var ed = document.getElementById("ed");
 		if (ed) ed.setAttribute("contenteditable", "false");
 		["tTitle", "tCat", "tStatus"].forEach(function (id) { var el = document.getElementById(id); if (el) el.disabled = true; });
+		// 탭 아이콘: 보기 사이트는 보라색 가방 (내 PC 는 청록색)
+		var ic = document.querySelector('link[rel="icon"]');
+		if (!ic) { ic = document.createElement("link"); ic.rel = "icon"; ic.type = "image/svg+xml"; document.head.appendChild(ic); }
+		ic.href = ROOT + "common/favicon-view.svg";
 	});
 
 	function b64(buf) { var s = "", a = new Uint8Array(buf); for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); }
