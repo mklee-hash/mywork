@@ -40,6 +40,7 @@
 <div id="bar">
 	<button class="btn" id="bBack" title="작업 목록으로">← 목록</button>
 	<h2 id="title">…</h2>
+	<button class="ib rw" id="bRename" title="작업 이름 바꾸기">✎</button>
 	<span id="meta"></span>
 	<span class="grp filters" id="filters"></span>
 	<span class="spacer"></span>
@@ -100,7 +101,8 @@
 		else {
 			h.push('<table class="list"><thead><tr><th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
 			rows.forEach(function (t) {
-				h.push('<tr class="row" data-open="' + esc(t.id) + '"><td class="k-title">' + esc(t.title || "제목 없음") + "</td>"
+				h.push('<tr class="row" data-open="' + esc(t.id) + '"><td class="k-title">' + esc(t.title || "제목 없음")
+					+ ' <button class="ib hov rw" data-ren="' + esc(t.id) + '" title="할일 이름 바꾸기">✎</button></td>'
 					+ "<td>" + statusCtl(t.id, t.status) + "</td>"
 					+ '<td class="k-date">' + esc(t.createdAt || "-") + '</td><td class="k-date">' + esc(t.savedAt || "-") + "</td>"
 					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(t.id) + '" title="삭제">✕</button></td></tr>');
@@ -129,34 +131,48 @@
 
 	$("bBack").onclick = function () { location.href = "index" + EXT + "?cat=" + CAT; };
 	$("bOverview").onclick = function () { location.href = docUrl(ID); };
-	// 상태만 바꿔 저장: 문서를 받아 status 만 고쳐 다시 저장 (버전 확인은 그대로)
-	function setStatus(id, st) {
+	// 일부 값만 바꿔 저장: 문서를 받아 그 값만 고쳐 다시 저장 (버전 확인은 그대로)
+	function patchDoc(id, fields, done) {
 		var ver = "";
-		msg("상태 저장 중…");
+		msg("저장 중…");
 		return fetch(API + "&doc=" + encodeURIComponent(id), { cache: "no-store" }).then(function (r) {
 			if (!r.ok) throw new Error(r.status);
 			ver = r.headers.get("X-Ver") || "";
 			return r.json();
 		}).then(function (j) {
-			j.status = st;
+			for (var k in fields) j[k] = fields[k];
 			j.savedAt = now();
 			return fetch(API + "&doc=" + encodeURIComponent(id) + "&ver=" + encodeURIComponent(ver), {
 				method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(j)
 			});
 		}).then(function (r) {
 			if (!r.ok) throw new Error(r.status === 409 ? "다른 창에서 고치는 중입니다. 새로고침 후 다시 하세요." : r.status);
-			msg("상태를 '" + st + "'(으)로 바꿨습니다.", "ok");
+			msg(done, "ok");
 			return load();
-		}).catch(function (e) { msg("상태 저장 실패: " + e.message, "err"); load(); });
+		}).catch(function (e) { msg("저장 실패: " + e.message, "err"); load(); });
 	}
 	document.addEventListener("change", function (e) {
 		var s = e.target.closest("select[data-sid]");
-		if (s) setStatus(s.getAttribute("data-sid"), s.value);
+		if (s) patchDoc(s.getAttribute("data-sid"), { status: s.value }, "상태를 '" + s.value + "'(으)로 바꿨습니다.");
 	});
+	// 이름 바꾸기: 작업 이름(제목 옆 ✎) · 할일 이름(표의 ✎)
+	function rename(id, old, what) {
+		var t = prompt(what + " 이름", old || "");
+		if (t === null || !t.trim() || t.trim() === old) return;
+		patchDoc(id, { title: t.trim() }, what + " 이름을 바꿨습니다.");
+	}
+	$("bRename").onclick = function () { rename(ID, work.title, "작업"); };
 	document.addEventListener("click", function (e) {
 		if (e.target.closest("select")) return;
 		var b = e.target.closest("[data-f]");
 		if (b) { filter = b.getAttribute("data-f"); render(); return; }
+		b = e.target.closest("[data-ren]");
+		if (b) {
+			e.stopPropagation();
+			var rt = todos.filter(function (x) { return x.id === b.getAttribute("data-ren"); })[0];
+			if (rt) rename(rt.id, rt.title, "할일");
+			return;
+		}
 		b = e.target.closest("[data-del]");
 		if (b) {
 			e.stopPropagation();
