@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- mkwork 아이콘 (GitHub 보기 사이트): M 흰색 + K 보라, M 의 오른쪽 기둥을 K 와 같이 씀 -->
+  <!-- MY Work 아이콘 (GitHub 보기 사이트): M 흰색 + W 보라, M 의 오른쪽 기둥을 W 의 왼쪽 기둥으로 같이 씀 (시안 1) -->
   <rect width="64" height="64" rx="14" fill="#0f172a"/>
-  <path d="M11 47 V17 L23.5 33 L36 17 V47" stroke="#f8fafc" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M36 33 L52 17 M41 28 L53 47" stroke="#a78bfa" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <path d="M10 47 V17 L20.5 32 L31 17 V47" stroke="#f8fafc" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 47 L41.5 25 L52 47 V17" stroke="#a78bfa" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>

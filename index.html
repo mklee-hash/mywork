@@ -4,7 +4,7 @@
 <script src="common/static.js" data-root=""></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mkwork</title>
+<title>MY Work</title>
 <link rel="icon" type="image/svg+xml" href="common/favicon.svg">
 <style>
 	:root { --top: #0f172a; --side: #1e293b; --side-fg: #cbd5e1; --accent: #14b8a6; }
@@ -13,7 +13,9 @@
 	body { display: flex; flex-direction: column; }
 	#top { flex: none; display: flex; align-items: stretch; gap: 4px; padding: 0 12px; background: var(--top); color: #e2e8f0; }
 	#top h1 { margin: 0 18px 0 4px; font-size: 18px; line-height: 46px; color: #fff; letter-spacing: .5px; }
-	#top h1 a { color: inherit; text-decoration: none; }
+	#top h1 a { color: inherit; text-decoration: none; display: flex; align-items: center; gap: 8px; height: 100%; }
+	#top h1 img { width: 24px; height: 24px; }
+	#tabs .bd { margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #dc2626; color: #fff; font-size: 11px; line-height: 18px; text-align: center; font-weight: bold; }
 	#tabs { display: flex; gap: 2px; overflow-x: auto; }
 	#tabs a { display: flex; align-items: center; padding: 0 16px; color: #94a3b8; text-decoration: none; border-bottom: 3px solid transparent; white-space: nowrap; }
 	#tabs a:hover { color: #fff; background: #1e293b; }
@@ -66,7 +68,7 @@
 </head>
 <body>
 <div id="top">
-	<h1><a href="#">mkwork</a></h1>
+	<h1><a href="#"><img src="common/favicon.svg" alt="">MY Work</a></h1>
 	<nav id="tabs"></nav>
 	<span class="spacer"></span>
 	<span class="tb" id="tbar"></span>
@@ -95,6 +97,7 @@
 </div>
 
 <script type="application/json" id="rootMenu">[
+  {"id": "support", "title": "고객지원", "local": true, "pcOnly": true, "items": [{"id": "home", "title": "고객지원", "url": "http://127.0.0.1:17890/"}]},
   {"id": "work", "title": "작업내역", "local": true, "categories": true},
   {"id": "server", "title": "서버관리", "local": true, "menu": "server/menu.json"},
   {"id": "skill", "title": "스킬", "items": [{"id": "home", "title": "스킬", "path": "common/soon", "query": "m=skill"}]},
@@ -167,6 +170,7 @@
 			items = items.map(function (s) {
 				var u;
 				if (STATIC && t.pcOnly) u = "common/soon.html?m=pc&t=" + encodeURIComponent(s.title);
+				else if (s.url) u = s.url;
 				else u = (/\.jsp$/.test(s.path) ? s.path : s.path + EXT) + (s.query ? "?" + s.query : "");
 				return { id: s.id, title: s.title, desc: s.desc || "", url: u };
 			});
@@ -216,7 +220,7 @@
 		var last = LAST[t.id] || {};
 		var it = t.items.filter(function (x) { return x.id === (h[1] || last.item); })[0] || t.items[0];
 		$("tabs").innerHTML = tabs.map(function (x) {
-			return '<a href="#' + esc(x.id) + '"' + (x === t ? ' class="on"' : "") + ">" + esc(x.title) + "</a>";
+			return '<a href="#' + esc(x.id) + '"' + (x === t ? ' class="on"' : "") + ">" + esc(x.title) + (BADGE[x.id] ? '<span class="bd">' + BADGE[x.id] + "</span>" : "") + "</a>";
 		}).join("");
 		$("side").classList.toggle("hide", t.items.length < 2);
 		$("menu").innerHTML = t.items.map(function (x) {
@@ -224,8 +228,8 @@
 				+ '<a class="nw" href="' + esc(x.url) + '" target="_blank" title="새 창">↗</a></li>';
 		}).join("");
 		$("foot").innerHTML = t.pcOnly ? "OZ 서버가 필요한 화면이라<br>내 PC에서만 동작합니다." : STATIC ? "보기 전용입니다." : "저장할 때마다 이전 내용이<br>백업됩니다.";
-		// 브라우저 탭: 내 PC(고치는 곳) = mkwork-edit, GitHub(보기만) = mkwork-view
-		document.title = (STATIC ? "mkwork-view" : "mkwork-edit") + (it ? " · " + it.title : "");
+		// 브라우저 탭·창 제목: 내 PC(고치는 곳) = MY Work, GitHub(보기만) = MY Work 보기. 트레이 아이콘이 "MY Work" 로 이 창을 찾아 앞으로 가져옴
+		document.title = (STATIC ? "MY Work 보기" : "MY Work") + (it ? " · " + it.title : "");
 		if (!it) return;
 		Object.keys(frames).forEach(function (k) { frames[k].style.display = k === t.id ? "" : "none"; });
 		var f = frameFor(t);
@@ -254,6 +258,15 @@
 		location.hash = tid + "/" + li.getAttribute("data-id");
 	});
 	window.addEventListener("hashchange", route);
+
+	// 고객지원(agent, 17890 포트) 화면이 보내는 메시지: 탭에 알림 수 표시 / 트레이 [열기] 때 그 탭으로
+	var BADGE = {};
+	window.addEventListener("message", function (e) {
+		var d = e.data || {};
+		if (!d.mywork || !/^http:\/\/(127\.0\.0\.1|localhost):17890$/.test(e.origin)) return;
+		if (typeof d.badge === "number" && BADGE[d.tab] !== d.badge) { BADGE[d.tab] = d.badge; route(); }
+		if (d.show && location.hash.slice(1).split("/")[0] !== d.tab) location.hash = d.tab;
+	});
 
 	// ---------------------------------------------------------------- 오른쪽 위
 	if (STATIC) {

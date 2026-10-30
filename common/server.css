@@ -1,4 +1,4 @@
-/* mkwork 공통 스타일 (서버관리 · 작업내역) */
+/* MY Work 공통 스타일 (서버관리 · 작업내역) */
 :root {
 	--line: #e2e8f0; --line2: #cbd5e1; --muted: #64748b; --accent: #0d9488; --accent-bg: #f0fdfa;
 	--sel: #ccfbf1; --hit: #fde68a; --warn-bg: #fffbeb;

@@ -152,7 +152,7 @@
 	function showLock(why) {
 		var d = document.createElement("div");
 		d.id = "mkLock";
-		d.innerHTML = '<form><h2>mkwork</h2><p>' + (why || "보기 전용 사이트입니다. 비밀번호를 넣어야 내용이 보입니다.") + "</p>"
+		d.innerHTML = '<form><h2>MY Work</h2><p>' + (why || "보기 전용 사이트입니다. 비밀번호를 넣어야 내용이 보입니다.") + "</p>"
 			+ '<input type="password" id="mkPw" placeholder="비밀번호" autocomplete="current-password" autofocus>'
 			+ '<label><input type="checkbox" id="mkKeep"> 이 브라우저에서 기억</label>'
 			+ '<button type="submit">열기</button><div class="err" id="mkErr"></div></form>';
