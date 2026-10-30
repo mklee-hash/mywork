@@ -32,7 +32,7 @@
 	#menu .nw { position: absolute; top: 10px; right: 10px; color: #94a3b8; text-decoration: none; display: none; }
 	#menu li:hover .nw, #menu li.on .nw { display: block; }
 	#foot { padding: 10px 16px; border-top: 1px solid #334155; font-size: 11px; color: #94a3b8; line-height: 1.6; }
-	#frame { flex: 1; border: 0; height: 100%; background: #fff; }
+	.frame { flex: 1; min-width: 0; border: 0; height: 100%; background: #fff; }
 	/* GitHub 올리기 */
 	#pub { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .45); }
 	#pub.open { display: flex; }
@@ -76,7 +76,7 @@
 		<ul id="menu"></ul>
 		<div id="foot"></div>
 	</div>
-	<iframe id="frame" name="frame"></iframe>
+	<!-- 대메뉴마다 iframe 을 여기에 하나씩 만듦 (route) -->
 </div>
 <div id="pub">
 	<div class="box">
@@ -185,11 +185,36 @@
 		}).catch(function () {}).then(route);
 	};
 
+	// 대메뉴마다 iframe 을 따로 두고 숨겼다 보였다 함: 다른 대메뉴에 다녀와도 보던 화면(하위 메뉴 · 연 작업 · 스크롤)이 그대로
+	// 마지막으로 보던 하위 메뉴와 화면 주소는 이 브라우저에 기억 (새로 열어도 그 화면으로)
+	var LAST = {}, frames = {}, BASE = location.pathname.replace(/[^\/]*$/, "");
+	try { LAST = JSON.parse(localStorage.getItem("mkwork.last") || "{}") || {}; } catch (e) {}
+	function remember(tid, item, url) {
+		LAST[tid] = { item: item, url: url };
+		try { localStorage.setItem("mkwork.last", JSON.stringify(LAST)); } catch (e) {}
+	}
+	function frameFor(t) {
+		if (frames[t.id]) return frames[t.id];
+		var f = document.createElement("iframe");
+		f.className = "frame";
+		f.name = "f_" + t.id;
+		// 안에서 다른 화면으로 옮겨 가면 그 주소를 기억 (같은 사이트 안일 때만)
+		f.addEventListener("load", function () {
+			try {
+				var p = f.contentWindow.location;
+				if (p.pathname.indexOf(BASE) === 0) remember(t.id, f.getAttribute("data-item"), p.pathname.slice(BASE.length) + p.search);
+			} catch (e) {}
+		});
+		$("wrap").appendChild(f);
+		return frames[t.id] = f;
+	}
+
 	function route() {
 		var h = decodeURIComponent(location.hash.slice(1)).split("/");
 		var t = tabs.filter(function (x) { return x.id === h[0]; })[0] || tabs[0];
 		if (!t) return;
-		var it = t.items.filter(function (x) { return x.id === h[1]; })[0] || t.items[0];
+		var last = LAST[t.id] || {};
+		var it = t.items.filter(function (x) { return x.id === (h[1] || last.item); })[0] || t.items[0];
 		$("tabs").innerHTML = tabs.map(function (x) {
 			return '<a href="#' + esc(x.id) + '"' + (x === t ? ' class="on"' : "") + ">" + esc(x.title) + "</a>";
 		}).join("");
@@ -201,12 +226,32 @@
 		$("foot").innerHTML = t.pcOnly ? "OZ 서버가 필요한 화면이라<br>내 PC에서만 동작합니다." : STATIC ? "보기 전용입니다." : "저장할 때마다 이전 내용이<br>백업됩니다.";
 		// 브라우저 탭: 내 PC(고치는 곳) = mkwork-edit, GitHub(보기만) = mkwork-view
 		document.title = (STATIC ? "mkwork-view" : "mkwork-edit") + (it ? " · " + it.title : "");
-		if (it && $("frame").getAttribute("src") !== it.url) $("frame").setAttribute("src", it.url);
+		if (!it) return;
+		Object.keys(frames).forEach(function (k) { frames[k].style.display = k === t.id ? "" : "none"; });
+		var f = frameFor(t);
+		f.style.display = "";
+		if (!f.getAttribute("src")) {
+			// 처음 여는 대메뉴: 지난번에 보던 화면이 이 하위 메뉴 것이면 거기서 시작
+			f.setAttribute("data-item", it.id);
+			f.setAttribute("src", last.item === it.id && last.url ? last.url : it.url);
+		} else if (f.getAttribute("data-item") !== it.id) {
+			// 다른 하위 메뉴를 고름 (또는 보던 하위 메뉴가 없어짐)
+			f.setAttribute("data-item", it.id);
+			f.setAttribute("src", it.url);
+		}
 	}
 	$("menu").addEventListener("click", function (e) {
 		if (e.target.closest("a")) return;
 		var li = e.target.closest("li[data-id]"), t = $("tabs").querySelector("a.on");
-		if (li && t) location.hash = t.getAttribute("href").slice(1) + "/" + li.getAttribute("data-id");
+		if (!li || !t) return;
+		var tid = t.getAttribute("href").slice(1), f = frames[tid];
+		// 지금 보는 하위 메뉴를 또 누르면 그 메뉴 첫 화면으로
+		if (f && f.getAttribute("data-item") === li.getAttribute("data-id")) {
+			var it = tabs.filter(function (x) { return x.id === tid; })[0].items.filter(function (x) { return x.id === li.getAttribute("data-id"); })[0];
+			if (it) f.setAttribute("src", it.url);
+			return;
+		}
+		location.hash = tid + "/" + li.getAttribute("data-id");
 	});
 	window.addEventListener("hashchange", route);
 
