@@ -1,8 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- mkwork 아이콘 (GitHub 보기 사이트): 서류 가방 -->
+  <!-- mkwork 아이콘 (GitHub 보기 사이트): M 흰색 + K 보라, M 의 오른쪽 기둥을 K 와 같이 씀 -->
   <rect width="64" height="64" rx="14" fill="#0f172a"/>
-  <path d="M24 19v-4a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v4" fill="none" stroke="#c4b5fd" stroke-width="4.5" stroke-linecap="round"/>
-  <rect x="9" y="19" width="46" height="33" rx="7" fill="#8b5cf6"/>
-  <path d="M9 33h46" stroke="#5b21b6" stroke-width="3.5"/>
-  <rect x="27" y="28.5" width="10" height="9" rx="2.5" fill="#f8fafc"/>
-</svg>
+  <path d="M11 47 V17 L23.5 33 L36 17 V47" stroke="#f8fafc" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M36 33 L52 17 M41 28 L53 47" stroke="#a78bfa" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>

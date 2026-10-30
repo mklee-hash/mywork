@@ -13,7 +13,7 @@
 	window.MK_EXT = ".html";
 
 	// 보기 전용: 수정 도구 숨김
-	var css = "#bSave,#tools,#bHist,#imgbar,#pEdit,#pFoot,#bNew,#bPub,.rw,[data-add]{display:none!important}"
+	var css = "#bSave,#tools,#bHist,#imgbar,#pEdit,#pFoot,#bNew,#bPub,.rw,[data-add]{display:none!important}.card li .star{pointer-events:none}"
 		+ "#tTitle,#tCat,#tStatus{pointer-events:none;background:#f8fafc}"
 		+ "#mkLock{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:#0f172a;font-family:'맑은 고딕','Malgun Gothic',sans-serif}"
 		+ "#mkLock form{width:360px;max-width:calc(100% - 32px);padding:26px 24px;background:#fff;border-radius:12px;font-size:14px;color:#0f172a}"
