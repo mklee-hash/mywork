@@ -11,10 +11,15 @@
 	.badge.s-진행중 { background: #dbeafe; color: #1e40af; }
 	.badge.s-대기 { background: #fef3c7; color: #92400e; }
 	.badge.s-완료 { background: #dcfce7; color: #166534; }
+	.badge.s-보류 { background: #ede9fe; color: #6d28d9; }
 	table.list td.k-title { font-weight: 600; }
 	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
 	table.list td.k-act { width: 40px; text-align: right; }
 	.filters .btn.on { font-weight: bold; }
+	/* 완료된 작업: 아래 따로, 조금 흐리게 */
+	.card.hold > header h3 { color: #6d28d9; }
+	.card.done > header h3 { color: #166534; }
+	.card.done table.list td { color: #64748b; }
 	#cats { position: fixed; inset: 0; z-index: 90; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; background: rgba(15, 23, 42, .35); }
 	#cats.open { display: flex; }
 	#cats .box { width: 460px; max-width: calc(100% - 32px); padding: 18px 20px; background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(15, 23, 42, .3); }
@@ -54,7 +59,7 @@
 <script>
 	var EXT = window.MK_EXT || ".jsp";
 	var API = "../common/data.jsp?space=work";
-	var STATUS = ["진행중", "대기", "완료"];
+	var STATUS = ["진행중", "대기", "보류", "완료"];
 	var CAT = (new URLSearchParams(location.search).get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
 	var CATS = [];   // [{id,title}] 왼쪽 메뉴 순서
 	var list = [], term = "", filter = "";
@@ -68,6 +73,10 @@
 	function workUrl(id) { return "work" + EXT + "?id=" + encodeURIComponent(id) + "&cat=" + CAT; }
 	function todosOf(id) { return list.filter(function (t) { return t.parent === id; }); }
 	function works() { return list.filter(function (w) { return !w.parent; }); }
+	// 작업의 최근 저장 = 작업 자체와 그 할일들 중 가장 늦은 저장 시각
+	function lastSaved(w) {
+		return todosOf(w.id).concat([w]).map(function (x) { return String(x.savedAt || x.createdAt || ""); }).sort().pop() || "";
+	}
 
 	function render() {
 		var all = CAT === "all";
@@ -77,25 +86,36 @@
 			var n = mine.filter(function (w) { return !s || w.status === s; }).length;
 			return '<button class="btn' + (filter === s ? " on" : "") + '" data-f="' + esc(s) + '">' + (s || "전체") + " " + n + "</button>";
 		}).join("");
+		// 최근 저장(작업 또는 그 할일 중 가장 늦게 저장한 때)이 맨 위
 		var rows = mine.filter(function (w) {
 			return (!filter || w.status === filter) && (!term || String(w.title).toLowerCase().indexOf(term.toLowerCase()) >= 0);
-		});
-		var h = ['<section class="card"><header><h3>작업 목록</h3><span class="cnt">' + rows.length + "</span></header>"];
-		if (!rows.length) h.push('<div class="empty">' + (mine.length ? "조건에 맞는 작업이 없습니다." : "아직 작업이 없습니다." + (window.MK_STATIC ? "" : " [＋ 새 작업]으로 만드세요.")) + "</div>");
-		else {
-			h.push('<table class="list"><thead><tr><th>작업</th>' + (all ? "<th>카테고리</th>" : "") + '<th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
-			rows.forEach(function (w) {
-				var ts = todosOf(w.id), done = ts.filter(function (t) { return t.status === "완료"; }).length;
-				h.push('<tr class="row" data-id="' + esc(w.id) + '"><td class="k-title">' + esc(w.title || "제목 없음") + "</td>"
+		}).sort(function (a, b) { return lastSaved(b).localeCompare(lastSaved(a)); });
+		// 진행 중인 작업 위, 보류 · 완료된 작업은 아래 목록으로 따로
+		var open = rows.filter(function (w) { return w.status !== "완료" && w.status !== "보류"; }),
+			hold = rows.filter(function (w) { return w.status === "보류"; }), done = rows.filter(function (w) { return w.status === "완료"; });
+		function table(ws) {
+			var t = ['<table class="list"><thead><tr><th>작업</th>' + (all ? "<th>카테고리</th>" : "") + '<th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>'];
+			ws.forEach(function (w) {
+				var ts = todosOf(w.id), dn = ts.filter(function (t) { return t.status === "완료"; }).length;
+				t.push('<tr class="row" data-id="' + esc(w.id) + '"><td class="k-title">' + esc(w.title || "제목 없음") + "</td>"
 					+ (all ? '<td><span class="badge">' + esc(catTitle(w.category)) + "</span></td>" : "")
-					+ '<td class="k-date">' + (ts.length ? ts.length + "개 · 완료 " + done : "-") + "</td>"
+					+ '<td class="k-date">' + (ts.length ? ts.length + "개 · 완료 " + dn : "-") + "</td>"
 					+ '<td><span class="badge s-' + esc(w.status) + '">' + esc(w.status || "-") + "</span></td>"
-					+ '<td class="k-date">' + esc(w.createdAt || "-") + '</td><td class="k-date">' + esc(w.savedAt || "-") + "</td>"
+					+ '<td class="k-date">' + esc(w.createdAt || "-") + '</td><td class="k-date">' + esc(lastSaved(w) || "-") + "</td>"
 					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(w.id) + '" title="삭제">✕</button></td></tr>');
 			});
-			h.push("</tbody></table>");
+			return t.join("") + "</tbody></table>";
 		}
-		$("content").innerHTML = h.join("") + "</section>";
+		var h = [];
+		if ((filter !== "완료" && filter !== "보류") || !(done.length || hold.length)) {
+			h.push('<section class="card"><header><h3>작업 목록</h3><span class="cnt">' + open.length + "</span></header>");
+			if (open.length) h.push(table(open));
+			else h.push('<div class="empty">' + (done.length || hold.length ? "진행 중인 작업이 없습니다." : mine.length ? "조건에 맞는 작업이 없습니다." : "아직 작업이 없습니다." + (window.MK_STATIC ? "" : " [＋ 새 작업]으로 만드세요.")) + "</div>");
+			h.push("</section>");
+		}
+		if (hold.length) h.push('<section class="card hold"><header><h3>보류</h3><span class="cnt">' + hold.length + "</span></header>" + table(hold) + "</section>");
+		if (done.length) h.push('<section class="card done"><header><h3>완료된 작업</h3><span class="cnt">' + done.length + "</span></header>" + table(done) + "</section>");
+		$("content").innerHTML = h.join("");
 		$("sInfo").textContent = (all ? "" : catTitle(CAT) + " " + mine.length + "건 · ") + "전체 작업 " + works().length + "건";
 	}
 

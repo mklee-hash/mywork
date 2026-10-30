@@ -20,9 +20,11 @@
 	.st.s-진행중 { background: #3b82f6; }
 	.st.s-대기 { background: #f59e0b; }
 	.st.s-완료 { background: #22c55e; }
+	.st.s-보류 { background: #8b5cf6; }
 	.badge.s-진행중 { background: #dbeafe; color: #1e40af; }
 	.badge.s-대기 { background: #fef3c7; color: #92400e; }
 	.badge.s-완료 { background: #dcfce7; color: #166534; }
+	.badge.s-보류 { background: #ede9fe; color: #6d28d9; }
 	table.list td.k-title { font-weight: 600; }
 	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
 	table.list td.k-act { width: 40px; text-align: right; }
@@ -47,6 +49,7 @@
 	select.sts.s-진행중 { background: #dbeafe; color: #1e40af; }
 	select.sts.s-대기 { background: #fef3c7; color: #92400e; }
 	select.sts.s-완료 { background: #dcfce7; color: #166534; }
+	select.sts.s-보류 { background: #ede9fe; color: #6d28d9; }
 	select.sts option { background: #fff; color: #0f172a; }
 	@media (max-width: 900px) { #side { display: none; } }
 </style>
@@ -75,7 +78,7 @@
 <script>
 	var EXT = window.MK_EXT || ".jsp";
 	var API = "../common/data.jsp?space=work";
-	var STATUS = ["진행중", "대기", "완료"];
+	var STATUS = ["진행중", "대기", "보류", "완료"];
 	var QS = new URLSearchParams(location.search);
 	var ID = (QS.get("id") || "").replace(/[^a-z0-9]/g, "");
 	var CAT = (QS.get("cat") || "all").replace(/[^a-z0-9_-]/g, "");

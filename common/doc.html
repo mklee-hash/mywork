@@ -25,6 +25,7 @@
 	#toc .wi .st.s-진행중 { background: #3b82f6; }
 	#toc .wi .st.s-대기 { background: #f59e0b; }
 	#toc .wi .st.s-완료 { background: #22c55e; }
+	#toc .wi .st.s-보류 { background: #8b5cf6; }
 	#tocH { margin: 2px 0 6px; padding-left: 10px; border-left: 3px solid var(--accent); background: #fff; font-size: 12px; }
 	#tocH div { padding: 3px 14px; }
 	#paper { flex: 1; min-width: 0; overflow-y: auto; background: #e2e8f0; padding: 20px; }
@@ -46,7 +47,7 @@
 	<h2 id="title">…</h2>
 	<input class="inp wonly" id="tTitle" placeholder="작업 제목" title="작업 제목">
 	<select class="inp wonly" id="tCat" title="카테고리"><option value="">미분류</option></select>
-	<select class="inp wonly" id="tStatus" title="상태"><option>진행중</option><option>대기</option><option>완료</option></select>
+	<select class="inp wonly" id="tStatus" title="상태"><option>진행중</option><option>대기</option><option>보류</option><option>완료</option></select>
 	<button class="btn primary" id="bSave" title="저장 (Ctrl+S)">저장</button>
 	<button class="btn" id="bDocx" title="지금 내용(저장 안 한 수정 포함)을 Word(.docx)로 다운로드">⬇ Word 다운로드</button>
 	<button class="btn" id="bHtml" title="그림까지 들어간 HTML 한 파일로 다운로드">⬇ HTML</button>
