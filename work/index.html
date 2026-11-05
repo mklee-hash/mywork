@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../common/static.js" data-root="../"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업내역</title>
+<link rel="stylesheet" href="../common/server.css">
+<link rel="stylesheet" href="../common/records.css">
+<style>
+	.badge.s-진행중 { background: #dbeafe; color: #1e40af; }
+	.badge.s-대기 { background: #fef3c7; color: #92400e; }
+	.badge.s-완료 { background: #dcfce7; color: #166534; }
+	.badge.s-보류 { background: #ede9fe; color: #6d28d9; }
+	table.list td.k-title { font-weight: 600; }
+	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
+	table.list td.k-act { width: 40px; text-align: right; }
+	.filters .btn.on { font-weight: bold; }
+	/* 내용 검색: 찾은 곳 한 줄 */
+	table.list td .snip { margin-top: 3px; font-weight: normal; font-size: 12px; color: var(--muted); }
+	table.list td .snip b { color: #475569; font-weight: 600; }
+	table.list td .snip mark { background: #fde68a; color: inherit; padding: 0 1px; border-radius: 2px; }
+	/* 완료된 작업: 아래 따로, 조금 흐리게 */
+	.card.hold > header h3 { color: #6d28d9; }
+	.card.done > header h3 { color: #166534; }
+	.card.done table.list td { color: #64748b; }
+	#cats { position: fixed; inset: 0; z-index: 90; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; background: rgba(15, 23, 42, .35); }
+	#cats.open { display: flex; }
+	#cats .box { width: 460px; max-width: calc(100% - 32px); padding: 18px 20px; background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(15, 23, 42, .3); }
+	#cats h3 { margin: 0 0 4px; font-size: 16px; }
+	#cats table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+	#cats td { padding: 3px 2px; }
+	#cats td.n { width: 70px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+	#cats td.a { width: 80px; white-space: nowrap; text-align: right; }
+	#cats .inp { width: 100%; }
+	#cats .row { display: flex; gap: 8px; align-items: center; }
+	/* 포스트잇 메모 (작업 목록 아래) */
+	#memos { max-width: 1400px; margin: 0 auto; }
+	#memos > header { display: flex; align-items: center; gap: 10px; margin: 6px 2px 10px; }
+	#memos > header h3 { margin: 0; font-size: 15px; }
+	#memoBoard { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+	.memo { position: relative; width: 230px; min-height: 170px; display: flex; flex-direction: column; border-radius: 3px 3px 3px 18px; box-shadow: 0 2px 6px rgba(15, 23, 42, .12), 0 8px 18px rgba(15, 23, 42, .06); }
+	.memo .mh { display: flex; align-items: center; gap: 4px; padding: 5px 6px 0 10px; opacity: .35; transition: opacity .15s; }
+	.memo:hover .mh, .memo:focus-within .mh { opacity: 1; }
+	.memo .mh .at { flex: 1; font-size: 11px; color: rgba(15, 23, 42, .55); }
+	.memo .mh .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(15, 23, 42, .25); cursor: pointer; }
+	.memo .mh .x { border: 0; background: none; color: rgba(15, 23, 42, .5); cursor: pointer; font-size: 13px; padding: 0 2px; }
+	.memo .mh .x:hover { color: #b91c1c; }
+	.memo .cat { position: absolute; right: 8px; bottom: 6px; font-size: 10.5px; color: rgba(15, 23, 42, .45); }
+	.memo textarea { flex: 1; min-height: 140px; margin: 0; padding: 6px 12px 22px; border: 0; background: transparent; resize: vertical; outline: none; font: inherit; font-size: 13.5px; line-height: 1.6; color: #1f2937; }
+	.memo.add { align-items: center; justify-content: center; border: 2px dashed #cbd5e1; background: transparent; box-shadow: none; color: #94a3b8; font-size: 15px; cursor: pointer; }
+	.memo.add:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="bar">
+	<h2 id="title">작업내역</h2>
+	<input class="inp" id="q" placeholder="제목·내용 검색" style="width:240px" title="작업과 그 할일의 제목·본문에서 찾습니다">
+	<span class="grp filters" id="filters"></span>
+	<span class="spacer"></span>
+	<button class="btn rw" id="bCats" title="왼쪽 카테고리 이름 바꾸기 · 추가 · 삭제 · 순서">카테고리 관리</button>
+	<button class="btn primary" id="bNew" title="새 작업 문서 만들기">＋ 새 작업</button>
+</div>
+<div id="cats">
+	<div class="box">
+		<h3>카테고리 관리</h3>
+		<div class="muted">이름을 고치거나 순서를 바꾸고 [저장]하세요. 카테고리를 지우면 그 안의 작업은 '미분류'가 됩니다(작업은 지워지지 않음).</div>
+		<table><tbody id="catRows"></tbody></table>
+		<div class="row"><button class="btn" id="catAdd">＋ 카테고리 추가</button><span class="spacer"></span><button class="btn" id="catClose">닫기</button><button class="btn primary" id="catSave">저장</button></div>
+	</div>
+</div>
+<div id="content"><div id="lists"></div><div id="memos"></div></div>
+<div id="status">
+	<span id="sInfo"></span>
+	<span class="spacer"></span>
+	<span id="msg"></span>
+</div>
+
+<script>
+	var EXT = window.MK_EXT || ".jsp";
+	var API = "../common/data.jsp?space=work";
+	var STATUS = ["진행중", "대기", "보류", "완료"];
+	var CAT = (new URLSearchParams(location.search).get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
+	var CATS = [];   // [{id,title}] 왼쪽 메뉴 순서
+	var list = [], term = "", filter = "";
+	function catTitle(id) { var c = CATS.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+	// 작업을 누르면 그 작업의 할일 목록 (work.jsp)
+	function workUrl(id) { return "work" + EXT + "?id=" + encodeURIComponent(id) + "&cat=" + CAT; }
+	function todosOf(id) { return list.filter(function (t) { return t.parent === id; }); }
+	function works() { return list.filter(function (w) { return !w.parent; }); }
+	// 작업의 최근 저장 = 작업 자체와 그 할일들 중 가장 늦은 저장 시각
+	function lastSaved(w) {
+		return todosOf(w.id).concat([w]).map(function (x) { return String(x.savedAt || x.createdAt || ""); }).sort().pop() || "";
+	}
+
+	// 검색: 작업과 그 할일의 제목·본문(목록의 text = 태그 뺀 본문)에서 찾음 → 찾은 곳 { title } 또는 { where, t, at }, 없으면 null
+	function found(w) {
+		var q = term.toLowerCase(), docs = [w].concat(todosOf(w.id));
+		for (var i = 0; i < docs.length; i++) {
+			var d = docs[i], name = i ? "할일 · " + (d.title || "제목 없음") : "내용";
+			if (String(d.title || "").toLowerCase().indexOf(q) >= 0) return i ? { where: name, t: "", at: -1 } : { title: true };
+			var t = String(d.text || ""), at = t.toLowerCase().indexOf(q);
+			if (at >= 0) return { where: name, t: t, at: at };
+		}
+		return null;
+	}
+
+	function render() {
+		var all = CAT === "all";
+		var mine = works().filter(function (w) { return all || w.category === CAT; });
+		$("title").textContent = "작업내역 · " + (all ? "전체" : catTitle(CAT));
+		$("filters").innerHTML = [""].concat(STATUS).map(function (s) {
+			var n = mine.filter(function (w) { return !s || w.status === s; }).length;
+			return '<button class="btn' + (filter === s ? " on" : "") + '" data-f="' + esc(s) + '">' + (s || "전체") + " " + n + "</button>";
+		}).join("");
+		// 최근 저장(작업 또는 그 할일 중 가장 늦게 저장한 때)이 맨 위
+		var hits = {};
+		var rows = mine.filter(function (w) {
+			return (!filter || w.status === filter) && (!term || (hits[w.id] = found(w)));
+		}).sort(function (a, b) { return lastSaved(b).localeCompare(lastSaved(a)); });
+		// 진행 중인 작업 위, 보류 · 완료된 작업은 아래 목록으로 따로
+		var open = rows.filter(function (w) { return w.status !== "완료" && w.status !== "보류"; }),
+			hold = rows.filter(function (w) { return w.status === "보류"; }), done = rows.filter(function (w) { return w.status === "완료"; });
+		function table(ws) {
+			// 내용에서 찾은 작업은 제목 아래 찾은 곳 (앞뒤 글자와 함께)
+			function snip(w) {
+				var h = hits[w.id];
+				if (!h || h.title) return "";
+				var body = h.at < 0 ? "" : esc((h.at > 40 ? "…" : "") + h.t.slice(Math.max(0, h.at - 40), h.at)) + "<mark>" + esc(h.t.substr(h.at, term.length)) + "</mark>"
+					+ esc(h.t.slice(h.at + term.length, h.at + term.length + 60) + (h.at + term.length + 60 < h.t.length ? "…" : ""));
+				return '<div class="snip"><b>' + esc(h.where) + "</b> " + body + "</div>";
+			}
+			var t = ['<table class="list"><thead><tr><th>작업</th>' + (all ? "<th>카테고리</th>" : "") + '<th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>'];
+			ws.forEach(function (w) {
+				var ts = todosOf(w.id), dn = ts.filter(function (t) { return t.status === "완료"; }).length;
+				t.push('<tr class="row" data-id="' + esc(w.id) + '"><td class="k-title">' + esc(w.title || "제목 없음") + snip(w) + "</td>"
+					+ (all ? '<td><span class="badge">' + esc(catTitle(w.category)) + "</span></td>" : "")
+					+ '<td class="k-date">' + (ts.length ? ts.length + "개 · 완료 " + dn : "-") + "</td>"
+					+ '<td><span class="badge s-' + esc(w.status) + '">' + esc(w.status || "-") + "</span></td>"
+					+ '<td class="k-date">' + esc(w.createdAt || "-") + '</td><td class="k-date">' + esc(lastSaved(w) || "-") + "</td>"
+					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(w.id) + '" title="삭제">✕</button></td></tr>');
+			});
+			return t.join("") + "</tbody></table>";
+		}
+		var h = [];
+		if ((filter !== "완료" && filter !== "보류") || !(done.length || hold.length)) {
+			h.push('<section class="card"><header><h3>작업 목록</h3><span class="cnt">' + open.length + "</span></header>");
+			if (open.length) h.push(table(open));
+			else h.push('<div class="empty">' + (done.length || hold.length ? "진행 중인 작업이 없습니다." : mine.length ? "조건에 맞는 작업이 없습니다." : "아직 작업이 없습니다." + (window.MK_STATIC ? "" : " [＋ 새 작업]으로 만드세요.")) + "</div>");
+			h.push("</section>");
+		}
+		if (hold.length) h.push('<section class="card hold"><header><h3>보류</h3><span class="cnt">' + hold.length + "</span></header>" + table(hold) + "</section>");
+		if (done.length) h.push('<section class="card done"><header><h3>완료된 작업</h3><span class="cnt">' + done.length + "</span></header>" + table(done) + "</section>");
+		$("lists").innerHTML = h.join("");
+		$("sInfo").textContent = (all ? "" : catTitle(CAT) + " " + mine.length + "건 · ") + "전체 작업 " + works().length + "건";
+	}
+
+	function load() {
+		return Promise.all([
+			fetch(API + "&list=1", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
+			fetch(API + "&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; })
+		]).then(function (x) {
+			CATS = x[1];
+			var j = x[0];
+			// 최근 저장 순
+			list = j.sort(function (a, b) { return String(b.savedAt || b.createdAt).localeCompare(String(a.savedAt || a.createdAt)); });
+			render();
+		}).catch(function (e) { msg("목록을 불러오지 못했습니다: " + e.message, "err"); });
+	}
+
+	$("q").addEventListener("input", function () { term = this.value.trim(); render(); });
+	document.addEventListener("click", function (e) {
+		var b = e.target.closest("[data-f]");
+		if (b) { filter = b.getAttribute("data-f"); render(); return; }
+		b = e.target.closest("[data-del]");
+		if (b) {
+			e.stopPropagation();
+			var w = list.filter(function (x) { return x.id === b.getAttribute("data-del"); })[0];
+			var ts = w ? todosOf(w.id) : [];
+			if (!w || !confirm("'" + (w.title || "제목 없음") + "' 작업" + (ts.length ? "과 할일 " + ts.length + "개" : "") + "를 삭제할까요?\n(WEB-INF/data/work/_backup 에 남습니다)")) return;
+			// 할일 먼저, 작업은 마지막에
+			ts.concat([w]).reduce(function (p, d) {
+				return p.then(function () {
+					return fetch(API + "&doc=" + encodeURIComponent(d.id) + "&delete=1", { method: "POST" }).then(function (r) { if (!r.ok) throw new Error(r.status); });
+				});
+			}, Promise.resolve()).then(function () {
+				msg("삭제했습니다.", "ok");
+				load();
+			}).catch(function (e) { msg("삭제 실패: " + e.message, "err"); load(); });
+			return;
+		}
+		var tr = e.target.closest("tr.row");
+		if (tr) location.href = workUrl(tr.getAttribute("data-id"));
+	});
+
+	$("bNew").onclick = function () {
+		var t = prompt("새 작업 제목" + (CAT === "all" ? " (카테고리는 [작업 개요]에서 고를 수 있습니다)" : " - " + catTitle(CAT)), "");
+		if (t === null) return;
+		t = t.trim() || "제목 없음";
+		var id = "w" + Date.now().toString(36), at = now();
+		var body = { type: "doc", title: t, category: CAT === "all" ? "" : CAT, status: "진행중", createdAt: at, savedAt: at, html: "<h1>" + esc(t) + "</h1><p><br></p>" };
+		fetch(API + "&doc=" + id + "&ver=", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body) })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); location.href = workUrl(id); })
+			.catch(function (e) { msg("만들기 실패: " + e.message, "err"); });
+	};
+
+	// ---------------------------------------------------------------- 카테고리 관리
+	function catRow(c) {
+		var n = works().filter(function (w) { return w.category === c.id; }).length;
+		return '<tr data-id="' + esc(c.id) + '"><td><input class="inp" value="' + esc(c.title) + '" placeholder="카테고리 이름"></td>'
+			+ '<td class="n">' + (c.id ? "작업 " + n + "개" : "새 카테고리") + '</td><td class="a"><button class="ib" data-mv="-1" title="위로">▲</button>'
+			+ '<button class="ib" data-mv="1" title="아래로">▼</button><button class="ib" data-cdel="' + n + '" title="삭제">✕</button></td></tr>';
+	}
+	$("bCats").onclick = function () {
+		$("catRows").innerHTML = CATS.map(catRow).join("");
+		$("cats").classList.add("open");
+	};
+	$("catClose").onclick = function () { $("cats").classList.remove("open"); };
+	$("catAdd").onclick = function () {
+		$("catRows").insertAdjacentHTML("beforeend", catRow({ id: "", title: "" }));
+		$("catRows").lastElementChild.querySelector("input").focus();
+	};
+	$("catRows").addEventListener("click", function (e) {
+		var t = e.target, tr = t.closest("tr");
+		if (!tr) return;
+		if (t.hasAttribute("data-mv")) {
+			if (+t.getAttribute("data-mv") < 0 && tr.previousElementSibling) tr.parentNode.insertBefore(tr, tr.previousElementSibling);
+			else if (+t.getAttribute("data-mv") > 0 && tr.nextElementSibling) tr.parentNode.insertBefore(tr.nextElementSibling, tr);
+		} else if (t.hasAttribute("data-cdel")) {
+			var n = +t.getAttribute("data-cdel");
+			if (n && !confirm("이 카테고리의 작업 " + n + "개가 '미분류'가 됩니다. 지울까요?")) return;
+			tr.remove();
+		}
+	});
+	$("catSave").onclick = function () {
+		var cats = Array.prototype.map.call($("catRows").rows, function (tr, i) {
+			var title = tr.querySelector("input").value.trim();
+			return { id: tr.getAttribute("data-id") || "c" + (Date.now() + i).toString(36), title: title };
+		}).filter(function (c) { return c.title; });
+		fetch(API + "&cats=1", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(cats) })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); })
+			.then(function () {
+				CATS = cats;
+				$("cats").classList.remove("open");
+				render();
+				msg("카테고리를 저장했습니다.", "ok");
+				// 왼쪽 메뉴 다시 그리기 (지금 카테고리를 지웠으면 전체로 감)
+				if (window.parent !== window && parent.MK_REFRESH) parent.MK_REFRESH();
+			})
+			.catch(function (e) { msg("카테고리 저장 실패: " + e.message, "err"); });
+	};
+
+	// ---------------------------------------------------------------- 포스트잇 메모
+	// 데이터: ../common/data.jsp?space=memo&doc=memos  { memos: [{ id, cat, text, color, at }] }
+	//   카테고리에서 붙인 메모는 그 카테고리에, '전체'에서는 모든 메모가 보임. 쓰면 1초 뒤 저장
+	var MEMO_API = "../common/data.jsp?space=memo&doc=memos";
+	var MEMO_COLORS = ["#fef08a", "#fbcfe8", "#bbf7d0", "#bae6fd", "#ddd6fe"];
+	var memoData = { type: "memos", memos: [] }, memoVer = "", memoTimer = null, memoSaving = null;
+	function memosHere() { return memoData.memos.filter(function (m) { return CAT === "all" || m.cat === CAT; }); }
+	function renderMemos() {
+		var ms = memosHere(), ro = window.MK_STATIC ? " readonly" : "";
+		$("memos").innerHTML = '<header><h3>📌 메모</h3><span class="cnt">' + ms.length + "</span></header>"
+			+ '<div id="memoBoard">' + ms.map(function (m) {
+				return '<div class="memo" data-mid="' + esc(m.id) + '" style="background:' + esc(m.color || MEMO_COLORS[0]) + '">'
+					+ '<div class="mh"><span class="at">' + esc(m.at || "") + "</span>"
+					+ (window.MK_STATIC ? "" : MEMO_COLORS.map(function (c) { return '<span class="dot" data-mc="' + c + '" style="background:' + c + '" title="색 바꾸기"></span>'; }).join("")
+						+ '<button class="x" data-mdel title="메모 지우기">✕</button>')
+					+ "</div><textarea placeholder=\"메모\"" + ro + ">" + esc(m.text) + "</textarea>"
+					+ (CAT === "all" && m.cat && m.cat !== "all" ? '<span class="cat">' + esc(catTitle(m.cat)) + "</span>" : "") + "</div>";
+			}).join("") + (window.MK_STATIC ? "" : '<div class="memo add" id="memoAdd" title="메모 붙이기">＋ 메모</div>') + "</div>";
+	}
+	function memoById(id) { return memoData.memos.filter(function (m) { return m.id === id; })[0]; }
+	// 저장은 한 번에 하나씩 (쓰는 동안 또 바뀌면 끝난 뒤 다시)
+	function saveMemos() {
+		clearTimeout(memoTimer);
+		if (memoSaving) { memoSaving.again = true; return; }
+		memoData.savedAt = now();
+		var job = memoSaving = { again: false };
+		fetch(MEMO_API + "&ver=" + encodeURIComponent(memoVer) + "&force=1", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(memoData) })
+			.then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+			.then(function (j) { memoVer = j.ver; msg("메모를 저장했습니다.", "ok"); })
+			.catch(function (e) { msg("메모 저장 실패: " + e.message, "err"); })
+			.then(function () { memoSaving = null; if (job.again) saveMemos(); });
+	}
+	function saveMemosSoon() { clearTimeout(memoTimer); memoTimer = setTimeout(saveMemos, 1000); }
+	$("memos").addEventListener("input", function (e) {
+		var box = e.target.closest(".memo[data-mid]");
+		if (!box || e.target.tagName !== "TEXTAREA") return;
+		var m = memoById(box.getAttribute("data-mid"));
+		m.text = e.target.value;
+		m.at = now().slice(0, 16);
+		box.querySelector(".at").textContent = m.at;
+		saveMemosSoon();
+	});
+	$("memos").addEventListener("focusout", function (e) { if (e.target.tagName === "TEXTAREA" && memoTimer) saveMemos(); });
+	$("memos").addEventListener("click", function (e) {
+		if (window.MK_STATIC) return;
+		if (e.target.closest("#memoAdd")) {
+			var m = { id: "m" + Date.now().toString(36), cat: CAT, text: "", color: MEMO_COLORS[0], at: now().slice(0, 16) };
+			memoData.memos.push(m);
+			renderMemos();
+			$("memos").querySelector('[data-mid="' + m.id + '"] textarea').focus();
+			saveMemos();
+			return;
+		}
+		var box = e.target.closest(".memo[data-mid]");
+		if (!box) return;
+		var m = memoById(box.getAttribute("data-mid"));
+		if (e.target.hasAttribute("data-mc")) {
+			m.color = e.target.getAttribute("data-mc");
+			box.style.background = m.color;
+			saveMemos();
+		} else if (e.target.hasAttribute("data-mdel")) {
+			if (m.text.trim() && !confirm("이 메모를 지울까요?\n(WEB-INF/data/memo/_backup 에 남습니다)")) return;
+			memoData.memos.splice(memoData.memos.indexOf(m), 1);
+			renderMemos();
+			saveMemos();
+		}
+	});
+	window.addEventListener("beforeunload", function () { if (memoTimer) saveMemos(); });
+	function loadMemos() {
+		return fetch(MEMO_API, { cache: "no-store" }).then(function (r) {
+			if (r.status === 404) return null;
+			if (!r.ok) throw new Error(r.status);
+			memoVer = r.headers.get("X-Ver") || "";
+			return r.json();
+		}).then(function (j) { if (j && j.memos) memoData = j; renderMemos(); })
+			.catch(function (e) { renderMemos(); msg("메모를 불러오지 못했습니다: " + e.message, "err"); });
+	}
+
+	load().then(loadMemos);
+</script>
+</body>
+</html>
