@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../common/static.js" data-root="../"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업</title>
+<link rel="stylesheet" href="../common/server.css">
+<link rel="stylesheet" href="../common/records.css">
+<style>
+	#main { flex: 1; min-height: 0; display: flex; }
+	#side { width: 250px; flex: none; overflow-y: auto; padding: 12px 0; border-right: 1px solid var(--line); background: #fff; font-size: 13px; }
+	#side .wh { padding: 2px 14px 8px; font-weight: bold; }
+	#side .ti { padding: 7px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
+	#side .ti:hover { background: #f1f5f9; }
+	#side .ti.ov { color: #0f766e; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+	#side .empty { padding: 6px 14px; color: var(--muted); }
+	#content { flex: 1; }
+	.st { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #cbd5e1; vertical-align: middle; }
+	.st.s-진행중 { background: #3b82f6; }
+	.st.s-대기 { background: #f59e0b; }
+	.st.s-완료 { background: #22c55e; }
+	.st.s-보류 { background: #8b5cf6; }
+	.badge.s-진행중 { background: #dbeafe; color: #1e40af; }
+	.badge.s-대기 { background: #fef3c7; color: #92400e; }
+	.badge.s-완료 { background: #dcfce7; color: #166534; }
+	.badge.s-보류 { background: #ede9fe; color: #6d28d9; }
+	table.list td.k-title { font-weight: 600; }
+	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
+	table.list td.k-act { width: 40px; text-align: right; }
+	.filters .btn.on { font-weight: bold; }
+	/* 작업 개요 요약 */
+	.ovw .ovb { padding: 12px 18px 14px; line-height: 1.6; }
+	.ovw .lead { margin: 0 0 10px; color: #334155; }
+	.ovw .outline { list-style: none; margin: 0; padding: 0; }
+	.ovw .outline li { padding: 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.ovw .outline li.l2 { padding-left: 22px; font-size: 12.5px; }
+	.ovw .outline .n { display: inline-block; min-width: 26px; color: var(--accent); }
+	.ovw .outline .snip { color: var(--muted); }
+	.ovw .stats { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+	.ovw .ai { margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #f5f3ff; border: 1px solid #ddd6fe; }
+	.ovw .ai .aih { margin-bottom: 4px; font-weight: bold; color: #5b21b6; font-size: 13px; }
+	.ovw .ai .aih .muted { font-weight: normal; font-size: 12px; }
+	.ovw .ai .stale { font-weight: normal; font-size: 12px; color: #b45309; }
+	.ovw .ai ul { margin: 0; padding-left: 20px; }
+	.ovw .ai li { margin: 2px 0; }
+	select.sts { height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 12px; font: inherit; font-size: 12px; cursor: pointer; background: #e2e8f0; color: #334155; }
+	select.sts:hover { border-color: var(--line2); }
+	select.sts.s-진행중 { background: #dbeafe; color: #1e40af; }
+	select.sts.s-대기 { background: #fef3c7; color: #92400e; }
+	select.sts.s-완료 { background: #dcfce7; color: #166534; }
+	select.sts.s-보류 { background: #ede9fe; color: #6d28d9; }
+	select.sts option { background: #fff; color: #0f172a; }
+	@media (max-width: 900px) { #side { display: none; } }
+</style>
+</head>
+<body>
+<div id="bar">
+	<button class="btn" id="bBack" title="작업 목록으로">← 목록</button>
+	<h2 id="title">…</h2>
+	<button class="ib rw" id="bRename" title="작업 이름 바꾸기">✎</button>
+	<span id="meta"></span>
+	<span class="grp filters" id="filters"></span>
+	<span class="spacer"></span>
+	<button class="btn" id="bOverview" title="작업 자체의 설명 · 제목 · 카테고리 · 상태">작업 개요</button>
+	<button class="btn primary rw" id="bAdd" title="이 작업에 할일 추가">＋ 할일 추가</button>
+</div>
+<div id="main">
+	<div id="side"></div>
+	<div id="content"></div>
+</div>
+<div id="status">
+	<span id="sInfo"></span>
+	<span class="spacer"></span>
+	<span id="msg"></span>
+</div>
+
+<script>
+	var EXT = window.MK_EXT || ".jsp";
+	var API = "../common/data.jsp?space=work";
+	var STATUS = ["진행중", "대기", "보류", "완료"];
+	var QS = new URLSearchParams(location.search);
+	var ID = (QS.get("id") || "").replace(/[^a-z0-9]/g, "");
+	var CAT = (QS.get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
+	var work = null, todos = [], cats = [], filter = "";
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+	function catTitle(id) { var c = cats.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
+	function docUrl(id) { return "../common/doc" + EXT + "?space=work&doc=" + encodeURIComponent(id) + "&cat=" + CAT; }
+	// 상태: 목록에서 바로 고르기 (보기 사이트에서는 글자로만)
+	function statusCtl(id, st) {
+		if (window.MK_STATIC) return '<span class="badge s-' + esc(st) + '">' + esc(st || "-") + "</span>";
+		return '<select class="sts s-' + esc(st) + '" data-sid="' + esc(id) + '" title="상태 바꾸기">' + STATUS.map(function (s) {
+			return "<option" + (s === st ? " selected" : "") + ">" + s + "</option>";
+		}).join("") + "</select>";
+	}
+
+	function render() {
+		$("title").textContent = work.title || "제목 없음";
+		document.title = (work.title || "작업") + " - 할일";
+		$("meta").innerHTML = '<span class="badge">' + esc(catTitle(work.category)) + "</span> " + statusCtl(work.id, work.status);
+		$("filters").innerHTML = [""].concat(STATUS).map(function (s) {
+			var n = todos.filter(function (t) { return !s || t.status === s; }).length;
+			return '<button class="btn' + (filter === s ? " on" : "") + '" data-f="' + esc(s) + '">' + (s || "전체") + " " + n + "</button>";
+		}).join("");
+		// 왼쪽: 작업 개요 + 할일
+		$("side").innerHTML = '<div class="wh">할일 <span class="muted">' + todos.length + "</span></div>"
+			+ '<div class="ti ov" data-open="' + esc(work.id) + '">📄 작업 개요</div>'
+			+ (todos.length ? todos.map(function (t) {
+				return '<div class="ti" data-open="' + esc(t.id) + '" title="' + esc(t.title) + '"><span class="st s-' + esc(t.status) + '"></span>' + esc(t.title || "제목 없음") + "</div>";
+			}).join("") : '<div class="empty">할일이 없습니다.</div>');
+		// 가운데: 할일 표
+		var rows = todos.filter(function (t) { return !filter || t.status === filter; });
+		var h = ['<section class="card"><header><h3>할일 목록</h3><span class="cnt">' + rows.length + "</span></header>"];
+		if (!rows.length) h.push('<div class="empty">' + (todos.length ? "조건에 맞는 할일이 없습니다." : "아직 할일이 없습니다." + (window.MK_STATIC ? "" : " [＋ 할일 추가]로 넣으세요.")) + "</div>");
+		else {
+			h.push('<table class="list"><thead><tr><th>할일</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
+			rows.forEach(function (t) {
+				h.push('<tr class="row" data-open="' + esc(t.id) + '"><td class="k-title">' + esc(t.title || "제목 없음")
+					+ ' <button class="ib hov rw" data-ren="' + esc(t.id) + '" title="할일 이름 바꾸기">✎</button></td>'
+					+ "<td>" + statusCtl(t.id, t.status) + "</td>"
+					+ '<td class="k-date">' + esc(t.createdAt || "-") + '</td><td class="k-date">' + esc(t.savedAt || "-") + "</td>"
+					+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(t.id) + '" title="삭제">✕</button></td></tr>');
+			});
+			h.push("</tbody></table>");
+		}
+		// 아래: 작업 개요 요약 ([전체 보기]로 개요 문서)
+		h.push('</section><section class="card ovw"><header><h3>📄 작업 개요</h3><span class="muted">요약</span><span class="spacer"></span>'
+			+ '<button class="btn rw" id="bAi" title="개요 본문과 할일 목록을 사내 AI(EKA)로 요약해 저장">✨ ' + (overviewDoc && overviewDoc.aiSummary ? "AI 다시 요약" : "AI 요약") + "</button>"
+			+ '<button class="btn" data-open="' + esc(work.id) + '">' + (window.MK_STATIC ? "전체 보기" : "전체 보기 · 고치기") + "</button></header>"
+			+ '<div class="ovb">' + overviewHtml + "</div>");
+		$("content").innerHTML = h.join("") + "</section>";
+		var done = todos.filter(function (t) { return t.status === "완료"; }).length;
+		$("sInfo").textContent = "할일 " + todos.length + "개 · 완료 " + done + "개";
+	}
+
+	// 작업 개요 요약: AI 요약(저장된 것) + 첫 문단 + 장 제목(번호)과 그 장의 첫 줄 + 표·그림 개수
+	var overviewHtml = "", overviewDoc = null;
+	function clip(s, n) { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n) + "…" : s; }
+	function overviewOf(j) {
+		var t = document.createElement("template");
+		t.innerHTML = (j && j.html) || "";
+		var root = t.content, hs = root.querySelectorAll("h1, h2"), out = [];
+		if (j && j.aiSummary) {
+			// 요약한 뒤에 개요를 고쳤으면 알려 줌 (상태만 바꾼 것도 저장 시각이 바뀌므로 '고쳤을 수 있음')
+			var stale = j.savedAt && j.aiSummaryAt && j.savedAt > j.aiSummaryAt;
+			out.push('<div class="ai"><div class="aih">✨ AI 요약 <span class="muted">' + esc(j.aiSummaryAt || "") + "</span>"
+				+ (stale ? ' <span class="stale">요약 뒤에 개요가 바뀌었을 수 있습니다</span>' : "") + "</div><ul>"
+				+ String(j.aiSummary).split("\n").map(function (l) { return l.replace(/^\s*[-•*]\s*/, "").trim(); }).filter(Boolean)
+					.map(function (l) { return "<li>" + esc(l) + "</li>"; }).join("") + "</ul></div>");
+		}
+		// 첫 문단: 첫 제목 앞의 글 (없으면 첫 제목 다음 글), 단 문서 제목과 같은 글은 뺌
+		var lead = "";
+		for (var el = root.firstElementChild; el && !/^H[12]$/.test(el.tagName); el = el.nextElementSibling) lead += " " + el.textContent;
+		if (!clip(lead, 1) && hs[0]) lead = nextText(hs[0]);
+		if (clip(lead, 1)) out.push('<p class="lead">' + esc(clip(lead, 180)) + "</p>");
+		// 장 제목: 문서 번호와 같게 (제목만 있고 내용 없는 작업 이름 제목은 뺌)
+		var n1 = 0, n2 = 0, items = [];
+		Array.prototype.forEach.call(hs, function (h) {
+			var lv = h.tagName === "H1" ? 1 : 2, num;
+			if (lv === 1) { n1++; n2 = 0; num = n1 + "."; } else { n2++; num = n1 + "." + n2; }
+			var title = clip(h.textContent, 60);
+			if (!title || (lv === 1 && title === work.title && !nextText(h))) return;
+			items.push('<li class="l' + lv + '"><span class="n">' + num + "</span><b>" + esc(title) + "</b>"
+				+ (nextText(h) ? ' <span class="snip">— ' + esc(clip(nextText(h), 70)) + "</span>" : "") + "</li>");
+		});
+		if (items.length) out.push('<ul class="outline">' + items.join("") + "</ul>");
+		var nt = root.querySelectorAll("table").length, ni = root.querySelectorAll("img").length;
+		if (nt || ni) out.push('<p class="stats">' + [nt ? "표 " + nt + "개" : "", ni ? "그림 " + ni + "개" : ""].filter(Boolean).join(" · ") + "</p>");
+		return out.join("") || '<p class="muted">작업 개요가 비어 있습니다.</p>';
+	}
+	// 제목 바로 뒤에 오는 글 (다음 제목 전까지 처음 나오는 글)
+	function nextText(h) {
+		for (var el = h.nextElementSibling; el && !/^H[12]$/.test(el.tagName); el = el.nextElementSibling) {
+			var s = clip(textOf(el), 400);
+			if (s) return s;
+		}
+		return "";
+	}
+	// 목록은 항목을 쉼표로, 표는 앞 칸 몇 개를 · 로 이어서
+	function textOf(el) {
+		if (/^(OL|UL)$/.test(el.tagName)) return Array.prototype.map.call(el.children, function (li) { return li.textContent.trim(); }).filter(Boolean).join(", ");
+		if (el.tagName === "TABLE") return Array.prototype.slice.call(el.querySelectorAll("td, th"), 0, 6).map(function (c) { return c.textContent.trim(); }).filter(Boolean).join(" · ");
+		return el.textContent;
+	}
+
+	function load() {
+		return Promise.all([
+			fetch(API + "&list=1", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
+			fetch(API + "&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; }),
+			fetch(API + "&doc=" + encodeURIComponent(ID), { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+		]).then(function (x) {
+			cats = x[1];
+			work = x[0].filter(function (w) { return w.id === ID; })[0];
+			if (!work) throw new Error("없는 작업입니다.");
+			overviewDoc = x[2];
+			overviewHtml = overviewOf(x[2]);
+			// 할일은 만든 순서
+			todos = x[0].filter(function (t) { return t.parent === ID; })
+				.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+			render();
+		}).catch(function (e) { $("title").textContent = "불러오기 실패"; msg(e.message, "err"); });
+	}
+
+	$("bBack").onclick = function () { location.href = "index" + EXT + "?cat=" + CAT; };
+	$("bOverview").onclick = function () { location.href = docUrl(ID); };
+	// AI 요약: 누를 때만 사내 AI(EKA)를 부르고, 결과는 작업 문서(aiSummary)에 저장해 다음부터는 저장된 것을 보여 줌
+	function aiSummary(btn) {
+		btn.disabled = true;
+		btn.textContent = "✨ 요약 중… (10초 정도)";
+		msg("AI 요약 중…");
+		fetch("../common/summary.jsp?doc=" + encodeURIComponent(ID), { method: "POST" })
+			.then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+			.then(function (j) { return patchDoc(ID, { aiSummary: j.summary, aiSummaryAt: now() }, "AI 요약을 저장했습니다."); })
+			.catch(function (e) { msg("AI 요약 실패: " + e.message, "err"); btn.disabled = false; btn.textContent = "✨ AI 요약"; });
+	}
+	// 일부 값만 바꿔 저장: 문서를 받아 그 값만 고쳐 다시 저장 (버전 확인은 그대로)
+	function patchDoc(id, fields, done) {
+		var ver = "";
+		msg("저장 중…");
+		return fetch(API + "&doc=" + encodeURIComponent(id), { cache: "no-store" }).then(function (r) {
+			if (!r.ok) throw new Error(r.status);
+			ver = r.headers.get("X-Ver") || "";
+			return r.json();
+		}).then(function (j) {
+			for (var k in fields) j[k] = fields[k];
+			j.savedAt = now();
+			return fetch(API + "&doc=" + encodeURIComponent(id) + "&ver=" + encodeURIComponent(ver), {
+				method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(j)
+			});
+		}).then(function (r) {
+			if (!r.ok) throw new Error(r.status === 409 ? "다른 창에서 고치는 중입니다. 새로고침 후 다시 하세요." : r.status);
+			msg(done, "ok");
+			return load();
+		}).catch(function (e) { msg("저장 실패: " + e.message, "err"); load(); });
+	}
+	document.addEventListener("change", function (e) {
+		var s = e.target.closest("select[data-sid]");
+		if (s) patchDoc(s.getAttribute("data-sid"), { status: s.value }, "상태를 '" + s.value + "'(으)로 바꿨습니다.");
+	});
+	// 이름 바꾸기: 작업 이름(제목 옆 ✎) · 할일 이름(표의 ✎)
+	function rename(id, old, what) {
+		var t = prompt(what + " 이름", old || "");
+		if (t === null || !t.trim() || t.trim() === old) return;
+		patchDoc(id, { title: t.trim() }, what + " 이름을 바꿨습니다.");
+	}
+	$("bRename").onclick = function () { rename(ID, work.title, "작업"); };
+	document.addEventListener("click", function (e) {
+		if (e.target.closest("select")) return;
+		var b = e.target.closest("[data-f]");
+		if (b) { filter = b.getAttribute("data-f"); render(); return; }
+		if (e.target.closest("#bAi")) { aiSummary(e.target.closest("#bAi")); return; }
+		b = e.target.closest("[data-ren]");
+		if (b) {
+			e.stopPropagation();
+			var rt = todos.filter(function (x) { return x.id === b.getAttribute("data-ren"); })[0];
+			if (rt) rename(rt.id, rt.title, "할일");
+			return;
+		}
+		b = e.target.closest("[data-del]");
+		if (b) {
+			e.stopPropagation();
+			var t = todos.filter(function (x) { return x.id === b.getAttribute("data-del"); })[0];
+			if (!t || !confirm("'" + (t.title || "제목 없음") + "' 할일을 삭제할까요?\n(WEB-INF/data/work/_backup 에 남습니다)")) return;
+			fetch(API + "&doc=" + encodeURIComponent(t.id) + "&delete=1", { method: "POST" }).then(function (r) {
+				if (!r.ok) throw new Error(r.status);
+				msg("삭제했습니다.", "ok");
+				load();
+			}).catch(function (e) { msg("삭제 실패: " + e.message, "err"); });
+			return;
+		}
+		b = e.target.closest("[data-open]");
+		if (b) location.href = docUrl(b.getAttribute("data-open"));
+	});
+
+	$("bAdd").onclick = function () {
+		var t = prompt("할일", "");
+		if (t === null || !t.trim()) return;
+		t = t.trim();
+		var id = "w" + Date.now().toString(36), at = now();
+		var body = { type: "doc", title: t, parent: ID, status: "진행중", createdAt: at, savedAt: at, html: "<h1>" + esc(t) + "</h1><p><br></p>" };
+		fetch(API + "&doc=" + id + "&ver=", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body) })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); msg("할일을 추가했습니다. 눌러서 상세 내용을 쓰세요.", "ok"); return load(); })
+			.catch(function (e) { msg("추가 실패: " + e.message, "err"); });
+	};
+
+	load();
+</script>
+</body>
+</html>
