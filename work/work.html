@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../common/static.js" data-root="../"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업</title>
+<link rel="stylesheet" href="../common/server.css">
+<link rel="stylesheet" href="../common/records.css">
+<style>
+	#main { flex: 1; min-height: 0; display: flex; }
+	#side { width: 250px; flex: none; overflow-y: auto; padding: 12px 0; border-right: 1px solid var(--line); background: #fff; font-size: 13px; }
+	#side .wh { padding: 2px 14px 8px; font-weight: bold; }
+	#side .ti { padding: 7px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
+	#side .ti:hover { background: #f1f5f9; }
+	#side .ti.ov { color: #0f766e; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+	#side .empty { padding: 6px 14px; color: var(--muted); }
+	#content { flex: 1; }
+	.st { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #cbd5e1; vertical-align: middle; }
+	.st.s-진행중 { background: #3b82f6; }
+	.st.s-대기 { background: #f59e0b; }
+	.st.s-완료 { background: #22c55e; }
+	.st.s-보류 { background: #8b5cf6; }
+	.badge.s-진행중 { background: #dbeafe; color: #1e40af; }
+	.badge.s-대기 { background: #fef3c7; color: #92400e; }
+	.badge.s-완료 { background: #dcfce7; color: #166534; }
+	.badge.s-보류 { background: #ede9fe; color: #6d28d9; }
+	table.list td.k-title { font-weight: 600; }
+	table.list td.k-date { white-space: nowrap; color: var(--muted); width: 150px; }
+	table.list td.k-act { width: 40px; text-align: right; }
+	.filters .btn.on { font-weight: bold; }
+	/* 작업 개요 요약 */
+	.ovw .ovb { padding: 12px 18px 14px; line-height: 1.6; }
+	.ovw .lead { margin: 0 0 10px; color: #334155; }
+	.ovw .outline { list-style: none; margin: 0; padding: 0; }
+	.ovw .outline li { padding: 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.ovw .outline li.l2 { padding-left: 22px; font-size: 12.5px; }
+	.ovw .outline .n { display: inline-block; min-width: 26px; color: var(--accent); }
+	.ovw .outline .snip { color: var(--muted); }
+	.ovw .stats { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+	.ovw .ai { margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #f5f3ff; border: 1px solid #ddd6fe; }
+	.ovw .ai .aih { margin-bottom: 4px; font-weight: bold; color: #5b21b6; font-size: 13px; }
+	.ovw .ai .aih .muted { font-weight: normal; font-size: 12px; }
+	.ovw .ai .stale { font-weight: normal; font-size: 12px; color: #b45309; }
+	.ovw .ai ul { margin: 0; padding-left: 20px; }
+	.ovw .ai li { margin: 2px 0; }
+	select.sts { height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 12px; font: inherit; font-size: 12px; cursor: pointer; background: #e2e8f0; color: #334155; }
+	select.sts:hover { border-color: var(--line2); }
+	select.sts.s-진행중 { background: #dbeafe; color: #1e40af; }
+	select.sts.s-대기 { background: #fef3c7; color: #92400e; }
+	select.sts.s-완료 { background: #dcfce7; color: #166534; }
+	select.sts.s-보류 { background: #ede9fe; color: #6d28d9; }
+	select.sts option { background: #fff; color: #0f172a; }
+	/* 할일 유형: 목록·왼쪽을 유형별로 묶음 */
+	/*   왼쪽 묶음 머리: 연한 하늘색 띠 + 🏷 · 건수는 오른쪽 끝 */
+	#side .kh { display: flex; align-items: center; gap: 5px; margin: 8px 0 2px; padding: 3px 14px; background: #eef1f8; border-left: 2px solid #7182a8; font-size: 11.5px; font-weight: 600; color: #4a5672; }
+	#side .kh .kn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	#side .kh .muted { font-weight: normal; color: #5b6785; }
+	#side .kh.none { background: #f1f5f9; border-left-color: #94a3b8; color: #475569; }
+	#side .kh ~ .ti { padding-left: 28px; }	/* 유형 아래 할일은 오른쪽으로 들여쓰기 (14 → 28px) */
+	/*   할일 표 묶음 머리: 같은 색 띠, 이름은 왼쪽 · 건수와 ▲▼✎＋는 오른쪽 끝 */
+	table.list tr.kgrp td { padding: 0; background: #eef1f8; border-top: 1px solid #d5dbea; }
+	table.list tr.kgrp:hover td { background: #eef1f8; }
+	table.list tr.kgrp.none td { background: #f1f5f9; border-top-color: var(--line); }
+	table.list tr.kgrp ~ tr.row td.k-title { padding-left: 26px; }	/* 유형 아래 할일은 오른쪽으로 들여쓰기 (12 → 26px) */
+	.kgh { display: flex; align-items: center; gap: 2px; padding: 3px 12px 3px 10px; border-left: 2px solid #7182a8; }
+	tr.kgrp.none .kgh { border-left-color: #94a3b8; }
+	.kgh .kn { font-weight: 600; color: #4a5672; font-size: 12.5px; }
+	tr.kgrp.none .kgh .kn { color: #475569; }
+	.kgh .spacer { flex: 1; }
+	.kgh .cnt { margin-right: 8px; color: #5b6785; font-size: 12px; }
+	tr.kgrp.none .kgh .cnt { color: var(--muted); }
+	.kgh .ib:disabled { opacity: .25; cursor: default; }
+	/*   할일 순서 ▲▼: 할일 칸 오른쪽 끝, 마우스를 올린 줄에만 (터치·좁은 화면은 늘 보임). 맨 위 ▲·맨 아래 ▼는 흐리게 */
+	.tmv { float: right; display: flex; margin: -1px -6px -1px 6px; }
+	.tmv .ib.off, .tmv .ib.off:hover { opacity: .25; cursor: default; background: none; border-color: transparent; }
+	@media (hover: none), (max-width: 900px) { tr.row .tmv .ib.hov { visibility: visible; } }
+	.kb { height: 22px; padding: 0 9px; border: 1px solid #d5dbea; border-radius: 11px; background: #eef1f8; color: #334366; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+	.kb:hover { border-color: #7182a8; }
+	.kb.none { background: none; border: 1px dashed var(--line2); color: var(--muted); }
+	/*   유형 선택 창 (작업 목록의 카테고리 관리 창과 같은 모양) */
+	#kinds { position: fixed; inset: 0; z-index: 90; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; background: rgba(15, 23, 42, .35); }
+	#kinds.open { display: flex; }
+	#kinds .box { width: 440px; max-width: calc(100% - 32px); padding: 18px 20px; background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(15, 23, 42, .3); }
+	#kinds h3 { margin: 0 0 2px; font-size: 16px; }
+	#kinds .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	#kinds .kl { max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+	#kinds .ko { display: flex; align-items: center; gap: 2px; padding: 6px 8px 6px 10px; border-top: 1px solid var(--line); cursor: pointer; }
+	#kinds .ko:first-child { border-top: 0; }
+	#kinds .ko:hover { background: #f4f6fb; }
+	#kinds .ko.on { background: #e6eaf4; font-weight: bold; color: #334366; }
+	#kinds .ko .kn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	#kinds .ko .n { color: var(--muted); font-size: 12px; font-weight: normal; margin-right: 6px; white-space: nowrap; }
+	#kinds .ko .ib:disabled { opacity: .25; cursor: default; }
+	#kinds .ko.none { color: var(--muted); }
+	#kinds .ko input { flex: 1; min-width: 0; }
+	#kinds .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+	#kinds .row .inp { flex: 1; }
+	@media (max-width: 900px) { #side { display: none; } }
+</style>
+</head>
+<body>
+<div id="bar">
+	<button class="btn" id="bBack" title="작업 목록으로">← 목록</button>
+	<h2 id="title">…</h2>
+	<button class="ib rw" id="bRename" title="작업 이름 바꾸기">✎</button>
+	<span id="meta"></span>
+	<span class="grp filters" id="filters"></span>
+	<span class="spacer"></span>
+	<button class="btn" id="bOverview" title="작업 자체의 설명 · 제목 · 카테고리 · 상태">작업 개요</button>
+	<button class="btn primary rw" id="bAdd" title="이 작업에 할일 추가">＋ 할일 추가</button>
+</div>
+<div id="main">
+	<div id="side"></div>
+	<div id="content"></div>
+</div>
+<div id="kinds">
+	<div class="box">
+		<h3>🏷 유형 선택</h3>
+		<div class="sub" id="kSub"></div>
+		<div class="kl" id="kList"></div>
+		<div class="row"><input class="inp" id="kNew" placeholder="새 유형 이름" autocomplete="off" spellcheck="false"><button class="btn primary" id="kAdd">＋ 새 유형으로</button></div>
+		<div class="row"><span class="muted" style="font-size:12px">이름을 누르면 그 유형으로 바뀝니다<br><span style="white-space:nowrap">▲▼ 순서</span> · <span style="white-space:nowrap">✎ 이름 고치기(그 유형 할일 모두)</span></span><span class="spacer"></span><button class="btn" id="kClose">닫기</button></div>
+	</div>
+</div>
+<div id="status">
+	<span id="sInfo"></span>
+	<span class="spacer"></span>
+	<span id="msg"></span>
+</div>
+
+<script>
+	var EXT = window.MK_EXT || ".jsp";
+	var API = "../common/data.jsp?space=work";
+	var STATUS = ["진행중", "대기", "보류", "완료"];
+	var QS = new URLSearchParams(location.search);
+	var ID = (QS.get("id") || "").replace(/[^a-z0-9]/g, "");
+	var CAT = (QS.get("cat") || "all").replace(/[^a-z0-9_-]/g, "");
+	var work = null, todos = [], cats = [], filter = "";
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+	function catTitle(id) { var c = cats.filter(function (x) { return x.id === id; })[0]; return c ? c.title : "미분류"; }
+	function docUrl(id) { return "../common/doc" + EXT + "?space=work&doc=" + encodeURIComponent(id) + "&cat=" + CAT; }
+	// 상태: 목록에서 바로 고르기 (보기 사이트에서는 글자로만)
+	function statusCtl(id, st) {
+		if (window.MK_STATIC) return '<span class="badge s-' + esc(st) + '">' + esc(st || "-") + "</span>";
+		return '<select class="sts s-' + esc(st) + '" data-sid="' + esc(id) + '" title="상태 바꾸기">' + STATUS.map(function (s) {
+			return "<option" + (s === st ? " selected" : "") + ">" + s + "</option>";
+		}).join("") + "</select>";
+	}
+
+	// 할일 유형 (작업의 '카테고리'와 헷갈리지 않게 할일은 '유형')
+	//   묶음 순서 = 작업에 저장한 유형 순서(kindOrder, 이름을 줄바꿈으로 이음, 묶음 머리 ▲▼로 바꿈) → 거기 없는 유형은 첫 할일이 만들어진 순서, '유형 없음'은 맨 뒤
+	function kindOf(t) { return String(t.kind || "").trim(); }
+	function hasKinds() { return todos.some(function (t) { return kindOf(t); }); }
+	function kindOrder() { return String(work.kindOrder || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean); }
+	function kindNames() { return byKind(todos).map(function (g) { return g.kind; }).filter(Boolean); }
+	function byKind(list) {
+		var g = [], m = {}, ord = kindOrder();
+		list.forEach(function (t) { var k = kindOf(t); if (!m["_" + k]) { m["_" + k] = { kind: k, items: [], first: g.length }; g.push(m["_" + k]); } m["_" + k].items.push(t); });
+		var rank = function (x) { var i = ord.indexOf(x.kind); return i < 0 ? 100000 + x.first : i; };
+		// 묶음 안의 할일 순서: 작업에 저장한 할일 순서(todoOrder)가 먼저, 거기 없는 할일은 만든 순서로 맨 뒤
+		var tord = todoOrder(), trank = function (t) { var i = tord.indexOf(t.id); return i < 0 ? 100000 + todos.indexOf(t) : i; };
+		g.forEach(function (x) { x.items.sort(function (a, b) { return trank(a) - trank(b); }); });
+		return g.filter(function (x) { return x.kind; }).sort(function (a, b) { return rank(a) - rank(b); }).concat(g.filter(function (x) { return !x.kind; }));
+	}
+	// 할일 순서 (작업에 저장: 할일 id 를 줄바꿈으로 이은 글자 todoOrder) — 할일 문서는 건드리지 않으므로 할일 저장 시각·작업 목록 순서는 그대로
+	//   같은 유형 묶음 안에서만 옮김 (다른 묶음으로는 유형을 바꿔서). 상태 거르기 중이면 보이는 이웃 할일 앞/뒤로
+	function todoOrder() { return String(work.todoOrder || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean); }
+	function shownTodos() { return todos.filter(function (t) { return !filter || t.status === filter; }); }
+	function moveTodo(id, d) {
+		var t = todos.filter(function (x) { return x.id === id; })[0];
+		if (!t) return;
+		var groups = byKind(todos), grp = groups.filter(function (g) { return g.kind === kindOf(t); })[0];
+		var vis = byKind(shownTodos()).filter(function (g) { return g.kind === kindOf(t); })[0];
+		var nb = vis && vis.items[vis.items.indexOf(t) + d];
+		if (!grp || !nb) return;
+		grp.items.splice(grp.items.indexOf(t), 1);
+		grp.items.splice(grp.items.indexOf(nb) + (d < 0 ? 0 : 1), 0, t);
+		// 화면 먼저 바꾸고 저장 (실패하면 알리고 서버 내용으로 되돌림)
+		work.todoOrder = [].concat.apply([], groups.map(function (g) { return g.items; })).map(function (x) { return x.id; }).join("\n");
+		render();
+		saveTodoOrder();
+	}
+	// 빠르게 여러 번 눌러도 한 번에 하나씩 저장, 저장 중에 또 바꿨으면 끝난 뒤 마지막 순서로 한 번 더
+	var ordBusy = false, ordAgain = false;
+	function saveTodoOrder() {
+		if (ordBusy) { ordAgain = true; return; }
+		ordBusy = true;
+		msg("저장 중…");
+		patchRaw(ID, { todoOrder: work.todoOrder }, true).then(function () {
+			ordBusy = false;
+			if (ordAgain) { ordAgain = false; saveTodoOrder(); return; }
+			msg("할일 순서를 바꿨습니다.", "ok");
+		}).catch(function (e) {
+			ordBusy = false; ordAgain = false;
+			msg("순서 저장 실패: " + e.message, "err");
+			load();
+		});
+	}
+	// 유형 순서 바꾸기: 지금 보이는 순서(전체 할일 기준)에서 한 칸 위/아래로 옮겨 작업에 저장
+	function moveKind(k, d) {
+		var ks = kindNames(), i = ks.indexOf(k), j = i + d;
+		if (i < 0 || j < 0 || j >= ks.length) return Promise.resolve();
+		ks[i] = ks[j]; ks[j] = k;
+		return patchDoc(ID, { kindOrder: ks.join("\n") }, "유형 순서를 바꿨습니다.", true);
+	}
+	// 유형 이름 바꾸기: 그 유형 할일을 한 건씩 차례로 저장하고, 저장해 둔 유형 순서에서도 이름을 바꿈
+	//   이미 있는 유형 이름으로 바꾸면 두 유형이 합쳐짐
+	function renameKind(ok, nn) {
+		nn = String(nn || "").trim();
+		if (!nn || nn === ok) return Promise.resolve();
+		if (kindNames().indexOf(nn) >= 0 && !confirm("'" + nn + "' 유형이 이미 있습니다. '" + ok + "' 할일을 모두 '" + nn + "'(으)로 합칠까요?")) return Promise.resolve();
+		var ord0 = kindOrder(), oi = ord0.indexOf(ok), done = "유형 이름을 '" + nn + "'(으)로 바꿨습니다.";
+		return todos.filter(function (x) { return kindOf(x) === ok; }).reduce(function (p, x) {
+			return p.then(function () { return patchDoc(x.id, { kind: nn }, done); });
+		}, Promise.resolve()).then(function () {
+			if (oi < 0) return;
+			ord0[oi] = nn;
+			return patchDoc(ID, { kindOrder: ord0.filter(function (s, i) { return ord0.indexOf(s) === i; }).join("\n") }, done, true);
+		});
+	}
+	function kindCtl(t) {
+		var k = kindOf(t);
+		if (window.MK_STATIC) return esc(k || "-");
+		return '<button class="kb' + (k ? "" : " none") + '" data-kind="' + esc(t.id) + '" title="유형 고르기 · 새로 만들기 · 이름 고치기">' + (k ? "🏷 " + esc(k) : "＋ 유형") + "</button>";
+	}
+
+	// ---------------------------------------------------------------- 유형 선택 창
+	//   할일의 [유형]을 누르면 엶: 있는 유형 목록(누르면 그 유형으로) · 새 유형 · ▲▼ 순서 · ✎ 이름 고치기 · 유형 없음
+	var kindFor = null;   // 유형을 고르는 할일
+	function openKinds(t) { kindFor = t.id; $("kNew").value = ""; kindsRender(); $("kinds").classList.add("open"); }
+	function closeKinds() { kindFor = null; $("kinds").classList.remove("open"); }
+	function kindsRender() {
+		var t = todos.filter(function (x) { return x.id === kindFor; })[0];
+		if (!t) { closeKinds(); return; }
+		var cur = kindOf(t), ks = kindNames();
+		$("kSub").textContent = "할일: " + (t.title || "제목 없음");
+		$("kList").innerHTML = ks.map(function (k, i) {
+			var n = todos.filter(function (x) { return kindOf(x) === k; }).length;
+			return '<div class="ko' + (k === cur ? " on" : "") + '" data-pick="' + esc(k) + '"><span class="kn">🏷 ' + esc(k) + "</span>"
+				+ '<span class="n">' + n + "건</span>"
+				+ '<button class="ib" data-kmv="' + esc(k) + '" data-d="-1" title="위로"' + (i === 0 ? " disabled" : "") + ">▲</button>"
+				+ '<button class="ib" data-kmv="' + esc(k) + '" data-d="1" title="아래로"' + (i === ks.length - 1 ? " disabled" : "") + ">▼</button>"
+				+ '<button class="ib" data-ked="' + esc(k) + '" title="이름 고치기 (이 유형 할일 모두)">✎</button></div>';
+		}).join("")
+			// '유형 없음' 줄은 이 할일에 유형이 있을 때만(유형 지우기용) — 유형이 없으면 안 보임
+			+ (cur ? '<div class="ko none" data-pick="" title="유형 지우기"><span class="kn">유형 없음</span></div>' : "");
+		$("kList").style.display = $("kList").innerHTML ? "" : "none";   // 고를 유형이 하나도 없으면 빈 칸 숨김
+	}
+	function pickKind(k) {
+		var t = todos.filter(function (x) { return x.id === kindFor; })[0];
+		closeKinds();
+		if (!t || kindOf(t) === k) return;
+		patchDoc(t.id, { kind: k }, k ? "유형을 '" + k + "'(으)로 바꿨습니다." : "유형을 지웠습니다.");
+	}
+	$("kClose").onclick = closeKinds;
+	$("kinds").addEventListener("mousedown", function (e) { if (e.target === $("kinds")) closeKinds(); });
+	document.addEventListener("keydown", function (e) { if (e.key === "Escape" && kindFor && !e.target.closest("#kList input")) closeKinds(); });
+	$("kAdd").onclick = function () { var v = $("kNew").value.trim(); if (v) pickKind(v); else $("kNew").focus(); };
+	$("kNew").addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); $("kAdd").click(); } });
+	$("kList").addEventListener("click", function (e) {
+		if (e.target.closest("input")) return;
+		var b = e.target.closest("[data-kmv]");
+		if (b) { if (!b.disabled) moveKind(b.getAttribute("data-kmv"), Number(b.getAttribute("data-d"))).then(kindsRender); return; }
+		b = e.target.closest("[data-ked]");
+		if (b) {
+			// 그 줄의 이름을 입력 칸으로 → Enter 저장 · Esc 취소
+			var row = b.closest(".ko"), old = b.getAttribute("data-ked"), kn = row.querySelector(".kn");
+			kn.outerHTML = '<input class="inp" value="' + esc(old) + '">';
+			var inp = row.querySelector("input"), fin = false;
+			inp.focus(); inp.select();
+			var finish = function (save) {
+				if (fin) return; fin = true;
+				if (!save || !inp.value.trim() || inp.value.trim() === old) { kindsRender(); return; }
+				renameKind(old, inp.value).then(kindsRender);
+			};
+			inp.addEventListener("keydown", function (ev) {
+				if (ev.isComposing) return;
+				if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+				else if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); finish(false); }
+			});
+			inp.addEventListener("blur", function () { finish(true); });
+			return;
+		}
+		b = e.target.closest("[data-pick]");
+		if (b) pickKind(b.getAttribute("data-pick"));
+	});
+
+	function render() {
+		$("title").textContent = work.title || "제목 없음";
+		document.title = (work.title || "작업") + " - 할일";
+		$("meta").innerHTML = '<span class="badge">' + esc(catTitle(work.category)) + "</span> " + statusCtl(work.id, work.status);
+		$("filters").innerHTML = [""].concat(STATUS).map(function (s) {
+			var n = todos.filter(function (t) { return !s || t.status === s; }).length;
+			return '<button class="btn' + (filter === s ? " on" : "") + '" data-f="' + esc(s) + '">' + (s || "전체") + " " + n + "</button>";
+		}).join("");
+		// 왼쪽: 작업 개요 + 할일 (유형이 하나라도 있으면 유형별로 묶음)
+		var showKinds = hasKinds();
+		$("side").innerHTML = '<div class="wh">할일 <span class="muted">' + todos.length + "</span></div>"
+			+ '<div class="ti ov" data-open="' + esc(work.id) + '">📄 작업 개요</div>'
+			+ (todos.length ? byKind(todos).map(function (g) {
+				return (showKinds ? '<div class="kh' + (g.kind ? "" : " none") + '"><span class="kn">' + (g.kind ? "🏷 " + esc(g.kind) : "유형 없음") + '</span><span class="muted">' + g.items.length + "</span></div>" : "")
+					+ g.items.map(function (t) {
+						return '<div class="ti" data-open="' + esc(t.id) + '" title="' + esc(t.title) + '"><span class="st s-' + esc(t.status) + '"></span>' + esc(t.title || "제목 없음") + "</div>";
+					}).join("");
+			}).join("") : '<div class="empty">할일이 없습니다.</div>');
+		// 가운데: 할일 표 (유형별로 묶고, 묶음 머리에 건수 · 그 유형으로 할일 추가 · 유형 이름 바꾸기)
+		var rows = shownTodos();
+		var h = ['<section class="card"><header><h3>할일 목록</h3><span class="cnt">' + rows.length + "</span></header>"];
+		if (!rows.length) h.push('<div class="empty">' + (todos.length ? "조건에 맞는 할일이 없습니다." : "아직 할일이 없습니다." + (window.MK_STATIC ? "" : " [＋ 할일 추가]로 넣으세요.")) + "</div>");
+		else {
+			h.push('<table class="list"><thead><tr><th>할일</th><th>유형</th><th>상태</th><th>만든 날</th><th>최근 저장</th><th class="rw"></th></tr></thead><tbody>');
+			var allKinds = kindNames();
+			byKind(rows).forEach(function (g) {
+				var ki = allKinds.indexOf(g.kind);
+				if (showKinds) h.push('<tr class="kgrp' + (g.kind ? "" : " none") + '"><td colspan="6"><div class="kgh"><span class="kn">' + (g.kind ? "🏷 " + esc(g.kind) : "유형 없음") + '</span><span class="spacer"></span>'
+					+ '<span class="cnt">' + g.items.length + "건</span>"
+					+ (g.kind ? '<button class="ib rw" data-mvk="' + esc(g.kind) + '" data-d="-1" title="유형을 위로"' + (ki <= 0 ? " disabled" : "") + ">▲</button>"
+						+ '<button class="ib rw" data-mvk="' + esc(g.kind) + '" data-d="1" title="유형을 아래로"' + (ki >= allKinds.length - 1 ? " disabled" : "") + ">▼</button>"
+						+ '<button class="ib rw" data-renk="' + esc(g.kind) + '" title="이 유형 이름 바꾸기 (이 유형 할일 모두)">✎</button>' : "")
+					+ '<button class="ib rw" data-addk="' + esc(g.kind) + '" title="' + esc(g.kind ? "'" + g.kind + "' 유형으로 할일 추가" : "유형 없이 할일 추가") + '">＋</button></div></td></tr>');
+				g.items.forEach(function (t, i) {
+					// ▲▼ 순서 (묶음에 할일이 둘 이상일 때만, 보기 사이트에서는 rw 로 숨김)
+					var mv = g.items.length < 2 ? "" : '<span class="tmv rw">'
+						+ '<button class="ib hov' + (i === 0 ? " off" : "") + '" data-mvt="' + esc(t.id) + '" data-d="-1" title="위로">▲</button>'
+						+ '<button class="ib hov' + (i === g.items.length - 1 ? " off" : "") + '" data-mvt="' + esc(t.id) + '" data-d="1" title="아래로">▼</button></span>';
+					h.push('<tr class="row" data-open="' + esc(t.id) + '"><td class="k-title">' + mv + esc(t.title || "제목 없음")
+						+ ' <button class="ib hov rw" data-ren="' + esc(t.id) + '" title="할일 이름 바꾸기">✎</button></td>'
+						+ "<td>" + kindCtl(t) + "</td>"
+						+ "<td>" + statusCtl(t.id, t.status) + "</td>"
+						+ '<td class="k-date">' + esc(t.createdAt || "-") + '</td><td class="k-date">' + esc(t.savedAt || "-") + "</td>"
+						+ '<td class="k-act rw"><button class="ib hov" data-del="' + esc(t.id) + '" title="삭제">✕</button></td></tr>');
+				});
+			});
+			h.push("</tbody></table>");
+		}
+		// 아래: 작업 개요 요약 ([전체 보기]로 개요 문서)
+		h.push('</section><section class="card ovw"><header><h3>📄 작업 개요</h3><span class="muted">요약</span><span class="spacer"></span>'
+			+ '<button class="btn rw" id="bAi" title="개요 본문과 할일 목록을 사내 AI(EKA)로 요약해 저장">✨ ' + (overviewDoc && overviewDoc.aiSummary ? "AI 다시 요약" : "AI 요약") + "</button>"
+			+ '<button class="btn" data-open="' + esc(work.id) + '">' + (window.MK_STATIC ? "전체 보기" : "전체 보기 · 고치기") + "</button></header>"
+			+ '<div class="ovb">' + overviewHtml + "</div>");
+		$("content").innerHTML = h.join("") + "</section>";
+		var done = todos.filter(function (t) { return t.status === "완료"; }).length;
+		$("sInfo").textContent = "할일 " + todos.length + "개 · 완료 " + done + "개";
+	}
+
+	// 작업 개요 요약: AI 요약(저장된 것) + 첫 문단 + 장 제목(번호)과 그 장의 첫 줄 + 표·그림 개수
+	var overviewHtml = "", overviewDoc = null;
+	function clip(s, n) { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n) + "…" : s; }
+	function overviewOf(j) {
+		var t = document.createElement("template");
+		t.innerHTML = (j && j.html) || "";
+		var root = t.content, hs = root.querySelectorAll("h1, h2"), out = [];
+		if (j && j.aiSummary) {
+			// 요약한 뒤에 개요를 고쳤으면 알려 줌 (상태만 바꾼 것도 저장 시각이 바뀌므로 '고쳤을 수 있음')
+			var stale = j.savedAt && j.aiSummaryAt && j.savedAt > j.aiSummaryAt;
+			out.push('<div class="ai"><div class="aih">✨ AI 요약 <span class="muted">' + esc(j.aiSummaryAt || "") + "</span>"
+				+ (stale ? ' <span class="stale">요약 뒤에 개요가 바뀌었을 수 있습니다</span>' : "") + "</div><ul>"
+				+ String(j.aiSummary).split("\n").map(function (l) { return l.replace(/^\s*[-•*]\s*/, "").trim(); }).filter(Boolean)
+					.map(function (l) { return "<li>" + esc(l) + "</li>"; }).join("") + "</ul></div>");
+		}
+		// 첫 문단: 첫 제목 앞의 글 (없으면 첫 제목 다음 글), 단 문서 제목과 같은 글은 뺌
+		var lead = "";
+		for (var el = root.firstElementChild; el && !/^H[12]$/.test(el.tagName); el = el.nextElementSibling) lead += " " + el.textContent;
+		if (!clip(lead, 1) && hs[0]) lead = nextText(hs[0]);
+		if (clip(lead, 1)) out.push('<p class="lead">' + esc(clip(lead, 180)) + "</p>");
+		// 장 제목: 문서 번호와 같게 (제목만 있고 내용 없는 작업 이름 제목은 뺌)
+		var n1 = 0, n2 = 0, items = [];
+		Array.prototype.forEach.call(hs, function (h) {
+			var lv = h.tagName === "H1" ? 1 : 2, num;
+			if (lv === 1) { n1++; n2 = 0; num = n1 + "."; } else { n2++; num = n1 + "." + n2; }
+			var title = clip(h.textContent, 60);
+			if (!title || (lv === 1 && title === work.title && !nextText(h))) return;
+			items.push('<li class="l' + lv + '"><span class="n">' + num + "</span><b>" + esc(title) + "</b>"
+				+ (nextText(h) ? ' <span class="snip">— ' + esc(clip(nextText(h), 70)) + "</span>" : "") + "</li>");
+		});
+		if (items.length) out.push('<ul class="outline">' + items.join("") + "</ul>");
+		var nt = root.querySelectorAll("table").length, ni = root.querySelectorAll("img").length;
+		if (nt || ni) out.push('<p class="stats">' + [nt ? "표 " + nt + "개" : "", ni ? "그림 " + ni + "개" : ""].filter(Boolean).join(" · ") + "</p>");
+		return out.join("") || '<p class="muted">작업 개요가 비어 있습니다.</p>';
+	}
+	// 제목 바로 뒤에 오는 글 (다음 제목 전까지 처음 나오는 글)
+	function nextText(h) {
+		for (var el = h.nextElementSibling; el && !/^H[12]$/.test(el.tagName); el = el.nextElementSibling) {
+			var s = clip(textOf(el), 400);
+			if (s) return s;
+		}
+		return "";
+	}
+	// 목록은 항목을 쉼표로, 표는 앞 칸 몇 개를 · 로 이어서
+	function textOf(el) {
+		if (/^(OL|UL)$/.test(el.tagName)) return Array.prototype.map.call(el.children, function (li) { return li.textContent.trim(); }).filter(Boolean).join(", ");
+		if (el.tagName === "TABLE") return Array.prototype.slice.call(el.querySelectorAll("td, th"), 0, 6).map(function (c) { return c.textContent.trim(); }).filter(Boolean).join(" · ");
+		return el.textContent;
+	}
+
+	function load() {
+		return Promise.all([
+			fetch(API + "&list=1", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
+			fetch(API + "&cats=1", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return []; }),
+			fetch(API + "&doc=" + encodeURIComponent(ID), { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+		]).then(function (x) {
+			cats = x[1];
+			work = x[0].filter(function (w) { return w.id === ID; })[0];
+			if (!work) throw new Error("없는 작업입니다.");
+			overviewDoc = x[2];
+			overviewHtml = overviewOf(x[2]);
+			// 할일은 만든 순서
+			todos = x[0].filter(function (t) { return t.parent === ID; })
+				.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+			render();
+		}).catch(function (e) { $("title").textContent = "불러오기 실패"; msg(e.message, "err"); });
+	}
+
+	$("bBack").onclick = function () { location.href = "index" + EXT + "?cat=" + CAT; };
+	$("bOverview").onclick = function () { location.href = docUrl(ID); };
+	// AI 요약: 누를 때만 사내 AI(EKA)를 부르고, 결과는 작업 문서(aiSummary)에 저장해 다음부터는 저장된 것을 보여 줌
+	function aiSummary(btn) {
+		btn.disabled = true;
+		btn.textContent = "✨ 요약 중… (10초 정도)";
+		msg("AI 요약 중…");
+		fetch("../common/summary.jsp?doc=" + encodeURIComponent(ID), { method: "POST" })
+			.then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+			.then(function (j) { return patchDoc(ID, { aiSummary: j.summary, aiSummaryAt: now() }, "AI 요약을 저장했습니다."); })
+			.catch(function (e) { msg("AI 요약 실패: " + e.message, "err"); btn.disabled = false; btn.textContent = "✨ AI 요약"; });
+	}
+	// 일부 값만 바꿔 저장: 문서를 받아 그 값만 고쳐 다시 저장 (버전 확인은 그대로)
+	function patchDoc(id, fields, done, keepSaved) {   // keepSaved: 유형 순서처럼 내용이 아닌 것은 저장 시각을 그대로 (AI 요약이 낡았다고 나오지 않게)
+		msg("저장 중…");
+		return patchRaw(id, fields, keepSaved).then(function () {
+			msg(done, "ok");
+			return load();
+		}).catch(function (e) { msg("저장 실패: " + e.message, "err"); load(); });
+	}
+	// 받아서 고쳐 저장만 (실패하면 오류를 던짐)
+	function patchRaw(id, fields, keepSaved) {
+		var ver = "";
+		return fetch(API + "&doc=" + encodeURIComponent(id), { cache: "no-store" }).then(function (r) {
+			if (!r.ok) throw new Error(r.status);
+			ver = r.headers.get("X-Ver") || "";
+			return r.json();
+		}).then(function (j) {
+			// 본문(html)은 맨 뒤로 — 목록(workList)이 앞부분에서 제목·상태 등을 찾음
+			var html = j.html;
+			delete j.html;
+			for (var k in fields) j[k] = fields[k];
+			if (!keepSaved) j.savedAt = now();
+			if (html !== undefined) j.html = html;
+			return fetch(API + "&doc=" + encodeURIComponent(id) + "&ver=" + encodeURIComponent(ver), {
+				method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(j)
+			});
+		}).then(function (r) {
+			if (!r.ok) throw new Error(r.status === 409 ? "다른 창에서 고치는 중입니다. 새로고침 후 다시 하세요." : r.status);
+		});
+	}
+	document.addEventListener("change", function (e) {
+		var s = e.target.closest("select[data-sid]");
+		if (s) patchDoc(s.getAttribute("data-sid"), { status: s.value }, "상태를 '" + s.value + "'(으)로 바꿨습니다.");
+	});
+	// 이름 바꾸기: 작업 이름(제목 옆 ✎) · 할일 이름(표의 ✎)
+	function rename(id, old, what) {
+		var t = prompt(what + " 이름", old || "");
+		if (t === null || !t.trim() || t.trim() === old) return;
+		patchDoc(id, { title: t.trim() }, what + " 이름을 바꿨습니다.");
+	}
+	$("bRename").onclick = function () { rename(ID, work.title, "작업"); };
+	document.addEventListener("click", function (e) {
+		if (e.target.closest("select")) return;
+		var b = e.target.closest("[data-f]");
+		if (b) { filter = b.getAttribute("data-f"); render(); return; }
+		if (e.target.closest("#bAi")) { aiSummary(e.target.closest("#bAi")); return; }
+		b = e.target.closest("[data-kind]");
+		if (b) {
+			e.stopPropagation();
+			var kt = todos.filter(function (x) { return x.id === b.getAttribute("data-kind"); })[0];
+			if (kt) openKinds(kt);
+			return;
+		}
+		// 할일 ▲▼: 줄 안의 버튼이라 할일이 열리지 않게 여기서 끝냄 (흐린 버튼은 아무것도 안 함)
+		b = e.target.closest(".tmv");
+		if (b) {
+			e.stopPropagation();
+			var mb = e.target.closest("[data-mvt]");
+			if (mb && !mb.classList.contains("off")) moveTodo(mb.getAttribute("data-mvt"), Number(mb.getAttribute("data-d")));
+			return;
+		}
+		b = e.target.closest("[data-mvk]");
+		if (b) { e.stopPropagation(); if (!b.disabled) moveKind(b.getAttribute("data-mvk"), Number(b.getAttribute("data-d"))); return; }
+		b = e.target.closest("[data-addk]");
+		if (b) { e.stopPropagation(); addTodo(b.getAttribute("data-addk")); return; }
+		b = e.target.closest("[data-renk]");
+		if (b) {
+			e.stopPropagation();
+			var ok = b.getAttribute("data-renk"), nn = prompt("'" + ok + "' 유형의 새 이름 (이 유형 할일 모두 바뀜)", ok);
+			if (nn !== null) renameKind(ok, nn);
+			return;
+		}
+		b = e.target.closest("[data-ren]");
+		if (b) {
+			e.stopPropagation();
+			var rt = todos.filter(function (x) { return x.id === b.getAttribute("data-ren"); })[0];
+			if (rt) rename(rt.id, rt.title, "할일");
+			return;
+		}
+		b = e.target.closest("[data-del]");
+		if (b) {
+			e.stopPropagation();
+			var t = todos.filter(function (x) { return x.id === b.getAttribute("data-del"); })[0];
+			if (!t || !confirm("'" + (t.title || "제목 없음") + "' 할일을 삭제할까요?\n(WEB-INF/data/work/_backup 에 남습니다)")) return;
+			fetch(API + "&doc=" + encodeURIComponent(t.id) + "&delete=1", { method: "POST" }).then(function (r) {
+				if (!r.ok) throw new Error(r.status);
+				msg("삭제했습니다.", "ok");
+				load();
+			}).catch(function (e) { msg("삭제 실패: " + e.message, "err"); });
+			return;
+		}
+		b = e.target.closest("[data-open]");
+		if (b) location.href = docUrl(b.getAttribute("data-open"));
+	});
+
+	// 할일 추가: [＋ 할일 추가]는 유형 없이, 유형 묶음 머리의 ＋는 그 유형으로
+	function addTodo(kind) {
+		var t = prompt(kind ? "할일 ('" + kind + "' 유형)" : "할일", "");
+		if (t === null || !t.trim()) return;
+		t = t.trim();
+		var id = "w" + Date.now().toString(36), at = now();
+		var body = { type: "doc", title: t, parent: ID, status: "진행중", kind: kind || "", createdAt: at, savedAt: at, html: "<h1>" + esc(t) + "</h1><p><br></p>" };
+		fetch(API + "&doc=" + id + "&ver=", { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(body) })
+			.then(function (r) { if (!r.ok) throw new Error(r.status); msg("할일을 추가했습니다. 눌러서 상세 내용을 쓰세요.", "ok"); return load(); })
+			.catch(function (e) { msg("추가 실패: " + e.message, "err"); });
+	}
+	$("bAdd").onclick = function () { addTodo(""); };
+
+	load();
+</script>
+</body>
+</html>

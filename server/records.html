@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../common/static.js" data-root="../"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>서버 관리</title>
+<link rel="stylesheet" href="../common/server.css">
+<link rel="stylesheet" href="../common/records.css">
+<script src="../common/zip.js"></script>
+<script src="../common/xlsx.js"></script>
+</head>
+<body>
+<div id="bar">
+	<h2 id="title">…</h2>
+	<input class="inp" id="q" placeholder="검색" style="width:260px">
+	<span id="qn" class="muted"></span>
+	<span class="spacer"></span>
+	<label class="chk" title="모든 암호를 보이게"><input type="checkbox" id="cReveal"> 암호 보기</label>
+	<button class="btn" id="bDown" title="지금 내용을 엑셀 파일로 다운로드">⬇ 엑셀 다운로드</button>
+	<button class="btn" id="bHist" title="저장 이력(백업)">이력</button>
+</div>
+<div id="content"></div>
+<div id="status">
+	<span id="sInfo"></span>
+	<span class="spacer"></span>
+	<span id="msg"></span>
+</div>
+<div id="dim"></div>
+<div id="panel">
+	<header><h3 id="pTitle"></h3><span id="pBtns"></span><button class="btn icon" id="pClose" title="닫기 (Esc)">×</button></header>
+	<div class="body" id="pBody"></div>
+	<footer id="pFoot" style="display:none"></footer>
+</div>
+<div id="drawer">
+	<button class="x" id="bHistX">×</button>
+	<h3>저장 이력</h3>
+	<div class="muted">저장할 때마다 저장 전 내용이 백업됩니다.</div>
+	<div class="note">원본 엑셀에서 다시 가져오기 (지금 내용은 백업됨):<br><code id="importCmd"></code></div>
+	<table id="histList"></table>
+</div>
+<input type="file" id="file" accept="image/*" multiple style="display:none">
+
+<script>
+	var DOC = (new URLSearchParams(location.search).get("doc") || "").replace(/[^a-z0-9_-]/g, "");
+	var API = "../common/data.jsp?space=server&doc=" + encodeURIComponent(DOC);
+	var data = null, ver = "", term = "";
+	var cur = null;   // 열린 항목 { ci, id, mode: view|edit, draft }
+
+	function $(id) { return document.getElementById(id); }
+	function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+	function imgUrl(n) { return API + "&img=" + encodeURIComponent(n); }
+	function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+	function store(k, v) { try { if (v === undefined) return localStorage.getItem("srv." + k); localStorage.setItem("srv." + k, v); } catch (e) { return null; } }
+	function now() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+	function coll(ci) { return data.collections[ci]; }
+	function rowOf(ci, id) { return coll(ci).rows.filter(function (r) { return r._id === id; })[0]; }
+	function hasDetails(c) { return c.fields.some(function (f) { return f.type === "details"; }); }
+	function plainFields(c) { return c.fields.filter(function (f) { return f.type !== "details" && f.type !== "images"; }); }
+	function rowTitle(c, r) { return r.name || r.purpose || r.email || r.company || r[plainFields(c)[0].k] || "(이름 없음)"; }
+
+	function copyText(v) {
+		function done() { msg("복사했습니다.", "ok"); }
+		if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(v).then(done); return; }
+		var t = document.createElement("textarea");
+		t.value = v;
+		document.body.appendChild(t);
+		t.select();
+		document.execCommand("copy");
+		t.remove();
+		done();
+	}
+
+	// 글자 -> HTML: 주소는 링크로, 검색어는 표시
+	function hl(s) {
+		var h = esc(s);
+		if (!term) return h;
+		var t = esc(term).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		return h.replace(new RegExp("(" + t + ")", "gi"), "<mark>$1</mark>");
+	}
+	function fmt(s) {
+		s = String(s == null ? "" : s);
+		var out = "", re = /(https?:\/\/[^\s<>"']+)/g, last = 0, m;
+		while ((m = re.exec(s))) {
+			out += hl(s.slice(last, m.index)) + '<a class="ln" href="' + esc(m[1]) + '" target="_blank" rel="noopener">' + hl(m[1]) + "</a>";
+			last = m.index + m[1].length;
+		}
+		return out + hl(s.slice(last));
+	}
+	// 메모 중 '...비밀번호 : 값' 줄은 값을 가림
+	function memoHtml(m) {
+		return m.split("\n").map(function (line) {
+			var x = /^(.*(?:암호|비밀번호|password)[^:：]*[:：])\s*(.+)$/i.exec(line);
+			return x ? esc(x[1]) + " " + secretHtml(x[2], false) : fmt(line);
+		}).join("<br>");
+	}
+	function secretHtml(v, hov) {
+		return '<span class="val secret"><span class="mask">••••••</span><span class="plain mono">' + esc(v) + "</span>"
+			+ '<button class="ib ' + (hov ? "hov" : "") + '" data-eye title="보기/숨기기">👁</button>'
+			+ '<button class="ib ' + (hov ? "hov" : "") + '" data-copy="' + esc(v) + '" title="복사">⧉</button></span>';
+	}
+	var COPY_KEYS = /^(email|ip|id|url|oldEmail)$/;
+	function cellHtml(f, v, inList) {
+		if (v == null || v === "") return '<span class="dim">-</span>';
+		if (f.type === "secret") return secretHtml(v, inList);
+		var body = fmt(v);
+		if (inList && f.type === "long") body = '<div class="clamp">' + body + "</div>";
+		if (COPY_KEYS.test(f.k) || /^\d+\.\d+\.\d+\.\d+$/.test(v)) body = '<span class="val">' + body + '<button class="ib ' + (inList ? "hov" : "") + '" data-copy="' + esc(v) + '" title="복사">⧉</button></span>';
+		return body;
+	}
+
+	// ---------------------------------------------------------------- 목록
+	function matches(c, r) {
+		if (!term) return true;
+		var lc = term.toLowerCase();
+		return c.fields.some(function (f) {
+			var v = r[f.k];
+			if (f.type === "details") return (v || []).some(function (it) { return [it.group, it.label, it.value, it.port, it.note].join(" ").toLowerCase().indexOf(lc) >= 0; });
+			return typeof v === "string" && v.toLowerCase().indexOf(lc) >= 0;
+		});
+	}
+	function render() {
+		var total = 0, h = [];
+		data.collections.forEach(function (c, ci) {
+			var lf = c.fields.filter(function (f) { return f.list; });
+			var rows = c.rows.filter(function (r) { return matches(c, r); });
+			total += rows.length;
+			h.push('<section class="card"><header><h3>' + esc(c.title) + '</h3><span class="cnt">' + (term ? rows.length + " / " : "") + c.rows.length + "</span>"
+				+ (c.memo ? '<span class="memo">' + memoHtml(c.memo) + "</span>" : "")
+				+ '<span class="spacer"></span><button class="btn" data-add="' + ci + '">＋ 추가</button></header>');
+			if (!rows.length) { h.push('<div class="empty">' + (term ? "검색 결과가 없습니다." : "항목이 없습니다. [＋ 추가]로 넣으세요.") + "</div></section>"); return; }
+			h.push('<table class="list"><thead><tr>' + lf.map(function (f) { return "<th>" + esc(f.label) + "</th>"; }).join("")
+				+ (hasDetails(c) ? "<th>상세</th>" : "") + "</tr></thead><tbody>");
+			var groups = [], by = {};
+			rows.forEach(function (r) {
+				var g = c.groupBy ? (r[c.groupBy] || "(구분 없음)") : "";
+				if (!(g in by)) { by[g] = []; groups.push(g); }
+				by[g].push(r);
+			});
+			var span = lf.length + (hasDetails(c) ? 1 : 0);
+			groups.forEach(function (g) {
+				if (c.groupBy) h.push('<tr class="grp"><td colspan="' + span + '">' + esc(g) + '<span class="n">' + by[g].length + "</span></td></tr>");
+				by[g].forEach(function (r) {
+					h.push('<tr class="row" data-ci="' + ci + '" data-id="' + esc(r._id) + '">' + lf.map(function (f) {
+						return '<td class="k-' + esc(f.k) + '">' + cellHtml(f, r[f.k], true) + "</td>";
+					}).join(""));
+					if (hasDetails(c)) {
+						var n = (r.details || []).length, ni = (r.images || []).length;
+						h.push('<td class="dim">' + (n ? n + "항목" : "") + (ni ? " · 그림 " + ni : "") + "</td>");
+					}
+					h.push("</tr>");
+				});
+			});
+			h.push("</tbody></table></section>");
+		});
+		$("content").innerHTML = h.join("");
+		$("qn").textContent = term ? total + "건" : "";
+		var src = String(data.source || "").split(/[\\\/]/).pop();
+		$("sInfo").innerHTML = '원본 <b title="' + esc(data.source) + '">' + esc(src) + "</b> · 가져옴 " + esc(data.importedAt || "-") + " · 저장 " + esc(data.savedAt || "-");
+	}
+
+	document.addEventListener("click", function (e) {
+		var b = e.target.closest("[data-copy]");
+		if (b) { e.stopPropagation(); copyText(b.getAttribute("data-copy")); return; }
+		b = e.target.closest("[data-eye]");
+		if (b) { e.stopPropagation(); b.closest(".secret").classList.toggle("show"); return; }
+		if (e.target.closest("a")) return;
+		b = e.target.closest("[data-add]");
+		if (b) { openItem(+b.getAttribute("data-add"), null, "edit"); return; }
+		var tr = e.target.closest("tr.row");
+		if (tr) openItem(+tr.getAttribute("data-ci"), tr.getAttribute("data-id"), "view");
+	}, true);
+
+	$("q").addEventListener("input", function () { term = this.value.trim(); render(); });
+	$("cReveal").checked = store("reveal") === "1";
+	document.body.classList.toggle("reveal", $("cReveal").checked);
+	$("cReveal").onchange = function () { store("reveal", this.checked ? "1" : "0"); document.body.classList.toggle("reveal", this.checked); };
+
+	// ---------------------------------------------------------------- 상세 / 수정 패널
+	function openItem(ci, id, mode) {
+		var c = coll(ci), r = id ? rowOf(ci, id) : null;
+		if (id && !r) return closePanel(true);
+		cur = { ci: ci, id: id, mode: mode, draft: JSON.parse(JSON.stringify(r || {})) };
+		$("panel").classList.toggle("wide", hasDetails(c) && mode === "edit");
+		$("panel").classList.add("open");
+		$("dim").classList.add("open");
+		drawPanel();
+	}
+	function closePanel(force) {
+		if (!force && cur && cur.mode === "edit" && formChanged() && !confirm("수정한 내용을 저장하지 않고 닫을까요?")) return;
+		cur = null;
+		$("panel").classList.remove("open");
+		$("dim").classList.remove("open");
+	}
+	$("pClose").onclick = function () { closePanel(false); };
+	$("dim").onclick = function () { closePanel(false); };
+
+	function drawPanel() {
+		var c = coll(cur.ci), r = cur.draft, isNew = !cur.id;
+		$("pTitle").textContent = isNew ? c.title + " - 새 항목" : rowTitle(c, r);
+		if (cur.mode === "view") {
+			$("pBtns").innerHTML = '<button class="btn primary" id="pEdit">수정</button>';
+			$("pFoot").style.display = "none";
+			$("pBody").innerHTML = viewHtml(c, r);
+			$("pEdit").onclick = function () { cur.mode = "edit"; $("panel").classList.toggle("wide", hasDetails(c)); drawPanel(); };
+		} else {
+			$("pBtns").innerHTML = "";
+			$("pFoot").style.display = "flex";
+			$("pFoot").innerHTML = '<button class="btn primary" id="pSave">저장</button><button class="btn" id="pCancel">취소</button><span class="spacer"></span>'
+				+ (isNew ? "" : '<button class="btn" id="pDel" style="color:#b91c1c">삭제</button>');
+			$("pBody").innerHTML = formHtml(c, r);
+			cur.snap = JSON.stringify(collectForm());
+			$("pSave").onclick = saveItem;
+			$("pCancel").onclick = function () {
+				if (formChanged() && !confirm("수정한 내용을 버릴까요?")) return;
+				if (isNew) closePanel(true); else openItem(cur.ci, cur.id, "view");
+			};
+			if (!isNew) $("pDel").onclick = deleteItem;
+			var first = $("pBody").querySelector(".in");
+			if (first) first.focus();
+		}
+	}
+
+	function viewHtml(c, r) {
+		var h = ['<dl class="kv">'];
+		plainFields(c).forEach(function (f) { h.push("<dt>" + esc(f.label) + "</dt><dd>" + cellHtml(f, r[f.k], false) + "</dd>"); });
+		h.push("</dl>");
+		if (hasDetails(c)) {
+			var items = r.details || [];
+			h.push('<div class="sect">상세 정보 <span class="badge">' + items.length + "</span></div>");
+			if (!items.length) h.push('<div class="muted">상세 정보가 없습니다. [수정]에서 추가하세요.</div>');
+			groupItems(items).forEach(function (g) {
+				h.push('<div class="dgrp"><div class="h">' + esc(g.name || "기타") + "</div>");
+				g.items.forEach(function (it) {
+					var v = it.value || "";
+					var vh = it.sec ? secretHtml(v, false) : v.indexOf("\n") >= 0 || /[#$>\/]/.test(v) ? "<pre>" + fmt(v) + "</pre>" : fmt(v);
+					var meta = (it.port ? '<span class="badge port">포트 ' + esc(it.port) + "</span>" : "") + (it.date ? '<span class="badge">확인 ' + esc(it.date) + "</span>" : "")
+						+ (it.note ? '<span class="note">' + fmt(it.note) + "</span>" : "");
+					h.push('<div class="ditem"><div class="l">' + esc(it.label || "") + '</div><div class="v">' + (v ? vh : "") + (meta ? '<div class="meta">' + meta + "</div>" : "") + "</div></div>");
+				});
+				h.push("</div>");
+			});
+		}
+		if (c.fields.some(function (f) { return f.type === "images"; }) && (r.images || []).length) {
+			h.push('<div class="sect">그림</div><div class="thumbs">');
+			r.images.forEach(function (im) { h.push('<div class="t"><img src="' + imgUrl(im.f) + '" data-open="' + esc(im.f) + '"></div>'); });
+			h.push("</div>");
+		}
+		return h.join("");
+	}
+	function groupItems(items) {
+		var out = [], by = {};
+		items.forEach(function (it, i) {
+			var g = it.group || "";
+			if (!(g in by)) { by[g] = { name: g, items: [] }; out.push(by[g]); }
+			by[g].items.push(it);
+		});
+		return out;
+	}
+
+	function formHtml(c, r) {
+		var h = ['<div class="form"><div class="grid">'];
+		plainFields(c).forEach(function (f) {
+			var v = r[f.k] || "", id = "f_" + f.k;
+			// 짧은 칸은 두 개씩, 여러 줄 칸은 한 줄 전체
+			var multi = f.k !== c.groupBy && (f.type === "long" || v.indexOf("\n") >= 0);
+			h.push('<div class="f' + (multi ? " full" : "") + '"><label class="fl" for="' + id + '">' + esc(f.label) + "</label>");
+			if (f.type === "secret" && v.indexOf("\n") < 0) {
+				h.push('<div class="pw"><input class="in mono" type="password" id="' + id + '" data-k="' + esc(f.k) + '" value="' + esc(v) + '" autocomplete="off">'
+					+ '<button type="button" class="btn icon" data-pweye="' + id + '" title="보기">👁</button></div>');
+			} else if (multi) {
+				h.push('<textarea class="in' + (f.type === "secret" ? " sec" : "") + '" id="' + id + '" data-k="' + esc(f.k) + '" rows="' + Math.min(10, Math.max(3, v.split("\n").length + 1)) + '">' + esc(v) + "</textarea>");
+			} else {
+				var list = f.k === c.groupBy ? ' list="dl_' + esc(f.k) + '"' : "";
+				h.push('<input class="in" id="' + id + '" data-k="' + esc(f.k) + '" value="' + esc(v) + '"' + list + ' autocomplete="off">');
+				if (list) h.push('<datalist id="dl_' + esc(f.k) + '">' + uniq(c.rows.map(function (x) { return x[f.k]; })).map(function (g) { return '<option value="' + esc(g) + '">'; }).join("") + "</datalist>");
+			}
+			h.push("</div>");
+		});
+		h.push("</div>");
+		if (hasDetails(c)) {
+			h.push('<div class="sect">상세 정보 <span class="spacer"></span><button type="button" class="btn" id="dAdd">＋ 항목 추가</button></div>');
+			h.push('<table class="dedit"><thead><tr><th style="width:120px">구분</th><th style="width:110px">항목</th><th>내용</th><th style="width:56px">포트</th><th style="width:150px">비고</th><th style="width:90px">확인일</th><th title="암호로 가리기">🔒</th><th style="width:76px"></th></tr></thead><tbody id="dBody">');
+			(r.details || []).forEach(function (it) { h.push(dRow(it)); });
+			h.push("</tbody></table>");
+			h.push('<datalist id="dl_dgroup">' + uniq([].concat.apply([], data.collections.map(function (cc) { return [].concat.apply([], cc.rows.map(function (x) { return (x.details || []).map(function (it) { return it.group; }); })); }))).map(function (g) { return '<option value="' + esc(g) + '">'; }).join("") + "</datalist>");
+		}
+		if (c.fields.some(function (f) { return f.type === "images"; })) {
+			h.push('<div class="sect">그림 <span class="spacer"></span><button type="button" class="btn" id="iAdd">＋ 그림 추가</button></div><div class="thumbs" id="iBox">');
+			(r.images || []).forEach(function (im) { h.push(imgBox(im)); });
+			h.push("</div>");
+		}
+		h.push("</div>");
+		return h.join("");
+	}
+	function dRow(it) {
+		var rows = Math.min(8, Math.max(1, (it.value || "").split("\n").length));
+		return '<tr><td><input class="in" data-d="group" list="dl_dgroup" value="' + esc(it.group) + '"></td>'
+			+ '<td><input class="in" data-d="label" value="' + esc(it.label) + '"></td>'
+			+ '<td><textarea class="in' + (it.sec ? " sec" : "") + '" data-d="value" rows="' + rows + '">' + esc(it.value) + "</textarea></td>"
+			+ '<td><input class="in" data-d="port" value="' + esc(it.port) + '"></td>'
+			+ '<td><textarea class="in" data-d="note" rows="1">' + esc(it.note) + "</textarea></td>"
+			+ '<td><input class="in" data-d="date" value="' + esc(it.date) + '"></td>'
+			+ '<td><input type="checkbox" data-d="sec"' + (it.sec ? " checked" : "") + "></td>"
+			+ '<td><button type="button" class="ib" data-mv="-1" title="위로">▲</button><button type="button" class="ib" data-mv="1" title="아래로">▼</button><button type="button" class="ib" data-del title="삭제">✕</button></td></tr>';
+	}
+	function imgBox(im) {
+		return '<div class="t" data-f="' + esc(im.f) + '" data-w="' + im.w + '" data-h="' + im.h + '"><img src="' + imgUrl(im.f) + '" data-open="' + esc(im.f) + '"><button type="button" class="ib" data-idel title="그림 빼기">✕</button></div>';
+	}
+	function uniq(a) { var o = []; a.forEach(function (v) { if (v && o.indexOf(v) < 0) o.push(v); }); return o; }
+
+	$("pBody").addEventListener("click", function (e) {
+		var t = e.target;
+		if (t.hasAttribute("data-open")) { window.open(imgUrl(t.getAttribute("data-open")), "_blank"); return; }
+		if (t.hasAttribute("data-pweye")) { var i = $(t.getAttribute("data-pweye")); i.type = i.type === "password" ? "text" : "password"; return; }
+		if (t.id === "dAdd") {
+			var last = $("dBody").lastElementChild, g = last ? last.querySelector('[data-d="group"]').value : "";
+			$("dBody").insertAdjacentHTML("beforeend", dRow({ group: g }));
+			$("dBody").lastElementChild.querySelector('[data-d="label"]').focus();
+			return;
+		}
+		if (t.id === "iAdd") { $("file").click(); return; }
+		var tr = t.closest("#dBody tr");
+		if (tr && t.hasAttribute("data-del")) { tr.remove(); return; }
+		if (tr && t.hasAttribute("data-mv")) {
+			if (+t.getAttribute("data-mv") < 0 && tr.previousElementSibling) tr.parentNode.insertBefore(tr, tr.previousElementSibling);
+			else if (+t.getAttribute("data-mv") > 0 && tr.nextElementSibling) tr.parentNode.insertBefore(tr.nextElementSibling, tr);
+			return;
+		}
+		if (t.hasAttribute("data-idel")) t.closest(".t").remove();
+	});
+	$("file").addEventListener("change", function () {
+		var files = Array.prototype.slice.call(this.files);
+		this.value = "";
+		files.reduce(function (p, file) {
+			return p.then(function () {
+				var ext = (file.type.split("/")[1] || "png").replace("jpeg", "jpg").replace(/[^a-z]/g, "");
+				msg("그림 올리는 중…");
+				return fetch(API + "&upload=" + ext, { method: "POST", body: file }).then(function (r) { return r.json(); }).then(function (j) {
+					if (!j.name) throw new Error(j.error || "실패");
+					return new Promise(function (ok) {
+						var im = new Image();
+						im.onload = function () {
+							var w = im.naturalWidth, h = im.naturalHeight;
+							if (w > 900) { h = Math.round(h * 900 / w); w = 900; }
+							$("iBox").insertAdjacentHTML("beforeend", imgBox({ f: j.name, w: w, h: h }));
+							msg("그림을 넣었습니다. [저장]을 눌러야 반영됩니다.", "ok");
+							ok();
+						};
+						im.src = imgUrl(j.name);
+					});
+				});
+			});
+		}, Promise.resolve()).catch(function (e) { msg("그림 올리기 실패: " + e.message, "err"); });
+	});
+
+	function collectForm() {
+		var c = coll(cur.ci), r = JSON.parse(JSON.stringify(cur.draft));
+		$("pBody").querySelectorAll(".form [data-k]").forEach(function (el) {
+			var v = el.value.replace(/\s+$/, "");
+			if (v) r[el.getAttribute("data-k")] = v; else delete r[el.getAttribute("data-k")];
+		});
+		if (hasDetails(c)) {
+			r.details = Array.prototype.map.call($("dBody").rows, function (tr) {
+				var it = {};
+				tr.querySelectorAll("[data-d]").forEach(function (el) {
+					var k = el.getAttribute("data-d");
+					if (k === "sec") { if (el.checked) it.sec = 1; }
+					else if (el.value.trim()) it[k] = el.value.replace(/\s+$/, "");
+				});
+				return it;
+			}).filter(function (it) { return it.label || it.value || it.note; });
+			if (!r.details.length) delete r.details;
+		}
+		if ($("iBox")) {
+			r.images = Array.prototype.map.call($("iBox").querySelectorAll(".t"), function (d) { return { f: d.getAttribute("data-f"), w: +d.getAttribute("data-w"), h: +d.getAttribute("data-h") }; });
+			if (!r.images.length) delete r.images;
+		}
+		return r;
+	}
+	function formChanged() { return cur && cur.mode === "edit" && cur.snap !== JSON.stringify(collectForm()); }
+
+	function saveItem() {
+		var c = coll(cur.ci), r = collectForm();
+		if (!plainFields(c).some(function (f) { return r[f.k]; })) { msg("내용을 입력하세요.", "err"); return; }
+		var before = JSON.stringify(data);
+		if (cur.id) {
+			var i = c.rows.indexOf(rowOf(cur.ci, cur.id));
+			c.rows[i] = r;
+		} else {
+			r._id = "n" + Date.now().toString(36);
+			// 같은 구분이 있으면 그 구분의 마지막 뒤에
+			var at = c.rows.length;
+			if (c.groupBy && r[c.groupBy]) for (var k = c.rows.length - 1; k >= 0; k--) if (c.rows[k][c.groupBy] === r[c.groupBy]) { at = k + 1; break; }
+			c.rows.splice(at, 0, r);
+		}
+		var ci = cur.ci;
+		persist(before, function () { openItem(ci, r._id, "view"); });
+	}
+	function deleteItem() {
+		var c = coll(cur.ci);
+		if (!confirm("'" + rowTitle(c, cur.draft) + "' 항목을 삭제할까요?\n(이력에서 되돌릴 수 있습니다)")) return;
+		var before = JSON.stringify(data);
+		c.rows.splice(c.rows.indexOf(rowOf(cur.ci, cur.id)), 1);
+		persist(before, function () { closePanel(true); });
+	}
+
+	// 서버에 저장. 실패하면 화면 데이터를 되돌림
+	function persist(before, after, force) {
+		msg("저장 중…");
+		data.savedAt = now();
+		fetch(API + "&ver=" + encodeURIComponent(ver) + (force ? "&force=1" : ""), {
+			method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify(data)
+		}).then(function (r) {
+			return r.json().then(function (j) { return { s: r.status, j: j }; });
+		}).then(function (x) {
+			if (x.s === 409) {
+				if (confirm("다른 창에서 먼저 저장한 내용이 있습니다.\n지금 내용으로 덮어쓸까요? (먼저 저장된 내용은 이력에 남습니다)")) { persist(before, after, true); return; }
+				throw new Error("저장하지 않았습니다.");
+			}
+			if (x.s !== 200) throw new Error(x.j.error || x.s);
+			ver = x.j.ver;
+			data.savedAt = x.j.savedAt;
+			render();
+			if (after) after();
+			msg("저장했습니다. " + x.j.savedAt, "ok");
+		}).catch(function (e) {
+			data = JSON.parse(before);
+			render();
+			msg("저장 실패: " + e.message, "err");
+		});
+	}
+
+	// ---------------------------------------------------------------- 엑셀 다운로드 (항목별 시트 + 서버별 상세 시트)
+	function toWorkbook() {
+		var HEAD = { b: 1, bg: "#DDEBF7", bd: 1, ha: "center", va: "middle" }, names = {};
+		function cell(v, extra) { var o = { v: v == null ? "" : String(v), bd: 1, wrap: 1, va: "top" }; for (var k in extra) o[k] = extra[k]; return o; }
+		function sheetName(n) {
+			n = String(n).replace(/[\[\]:*?\/\\]/g, "_").slice(0, 31) || "Sheet";
+			var b = n, i = 2;
+			while (names[n]) n = b.slice(0, 27) + " (" + i++ + ")";
+			names[n] = 1;
+			return n;
+		}
+		var sheets = [];
+		data.collections.forEach(function (c) {
+			var fs = plainFields(c), rows = [];
+			rows.push([cell(c.title + (c.memo ? "  (" + c.memo.replace(/\n/g, " / ") + ")" : ""), { b: 1, bd: 0 })]);
+			rows.push(fs.map(function (f) { return cell(f.label, HEAD); }));
+			c.rows.forEach(function (r) { rows.push(fs.map(function (f) { return cell(r[f.k]); })); });
+			sheets.push({ name: sheetName(c.title), cols: fs.map(function (f) { return f.type === "long" ? 300 : f.k === "name" || f.k === "purpose" ? 220 : 150; }), rows: rows, merges: [], images: [] });
+		});
+		data.collections.forEach(function (c) {
+			if (!hasDetails(c)) return;
+			c.rows.forEach(function (r) {
+				if (!(r.details || []).length && !(r.images || []).length) return;
+				var rows = [[cell(rowTitle(c, r) + (r.ip ? "  " + r.ip : ""), { b: 1, bd: 0 })], ["구분", "항목", "내용", "포트", "비고", "확인일"].map(function (t) { return cell(t, HEAD); })];
+				(r.details || []).forEach(function (it) { rows.push([cell(it.group), cell(it.label), cell(it.value), cell(it.port), cell(it.note), cell(it.date)]); });
+				var y = rows.length + 1, imgs = (r.images || []).map(function (im) {
+					var o = { f: im.f, r: y, c: 0, dx: 0, dy: 0, w: im.w, h: im.h };
+					y += Math.ceil(im.h / 22) + 1;
+					return o;
+				});
+				while (rows.length < y) rows.push([]);
+				sheets.push({ name: sheetName("상세_" + rowTitle(c, r)), cols: [110, 120, 420, 50, 220, 90], rows: rows, merges: [], images: imgs });
+			});
+		});
+		return { sheets: sheets };
+	}
+	$("bDown").onclick = function () {
+		msg("엑셀 파일 만드는 중…");
+		buildXlsx(toWorkbook(), imgUrl).then(function (blob) {
+			downloadBlob(blob, sourceBase(data.source) + ".xlsx");
+			msg("다운로드했습니다.", "ok");
+		}).catch(function (e) { msg("다운로드 실패: " + e.message, "err"); });
+	};
+
+	// ---------------------------------------------------------------- 이력
+	$("bHist").onclick = function () {
+		$("drawer").classList.add("open");
+		$("importCmd").textContent = 'python -I -X utf8 C:\\dev\\workspace\\mkwork\\tools\\import_sources.py ' + DOC + " --force";
+		$("histList").innerHTML = '<tr><td class="muted">불러오는 중…</td></tr>';
+		fetch(API + "&backups=1", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (list) {
+			$("histList").innerHTML = list.length ? list.map(function (b) {
+				return "<tr><td>" + esc(b.time) + (/_import\.json$/.test(b.name) ? ' <span class="muted">(다시 가져오기 전)</span>' : "") + '</td><td class="muted">' + Math.ceil(b.size / 1024) + 'KB</td><td><button class="btn" data-b="' + esc(b.name) + '" data-t="' + esc(b.time) + '">되돌리기</button></td></tr>';
+			}).join("") : '<tr><td class="muted">아직 이력이 없습니다.</td></tr>';
+		});
+	};
+	$("bHistX").onclick = function () { $("drawer").classList.remove("open"); };
+	$("histList").addEventListener("click", function (e) {
+		var b = e.target.closest("[data-b]");
+		if (!b || !confirm(b.getAttribute("data-t") + " 저장 전 내용으로 되돌릴까요?\n(지금 내용도 이력에 남습니다)")) return;
+		fetch(API + "&backup=" + encodeURIComponent(b.getAttribute("data-b")), { cache: "no-store" })
+			.then(function (r) { return r.json(); })
+			.then(function (j) {
+				if (!j.collections) throw new Error("이 백업은 예전 형식이라 되돌릴 수 없습니다.");
+				var before = JSON.stringify(data);
+				data = j;
+				$("drawer").classList.remove("open");
+				closePanel(true);
+				persist(before, null);
+			}).catch(function (e) { msg(e.message, "err"); });
+	});
+
+	document.addEventListener("keydown", function (e) {
+		if (e.key === "Escape") {
+			if ($("drawer").classList.contains("open")) $("drawer").classList.remove("open");
+			else if (cur) closePanel(false);
+		} else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s" && cur && cur.mode === "edit") {
+			e.preventDefault();
+			saveItem();
+		} else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f" && !cur) {
+			e.preventDefault();
+			$("q").focus();
+			$("q").select();
+		}
+	});
+	window.addEventListener("beforeunload", function (e) { if (formChanged()) { e.preventDefault(); e.returnValue = ""; } });
+
+	// ---------------------------------------------------------------- 시작
+	fetch(API, { cache: "no-store" }).then(function (r) {
+		if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || r.status); });
+		ver = r.headers.get("X-Ver") || "";
+		return r.json();
+	}).then(function (j) {
+		if (!j.collections) throw new Error("예전 형식 데이터입니다. 원본에서 다시 가져오세요: import_sources.py " + DOC + " --force");
+		data = j;
+		$("title").textContent = data.title || DOC;
+		document.title = (data.title || DOC) + " - 서버 관리";
+		render();
+	}).catch(function (e) {
+		$("title").textContent = "불러오기 실패";
+		msg(e.message, "err");
+	});
+</script>
+</body>
+</html>
